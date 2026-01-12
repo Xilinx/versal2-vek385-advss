@@ -4,7 +4,7 @@
 
 # local variables
 enable_beta_device xc2ve3858-ssva2112-2MP-e-S
-set ::proj_name hdmi_advss_ced_prj
+set ::proj_name hdmi
 set ::bd_name versal_gen2_platform
 set proj_dir ./runs/${::proj_name}
 set constrs_dir "./xdc"

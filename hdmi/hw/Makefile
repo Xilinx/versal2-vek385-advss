@@ -8,7 +8,7 @@ PWD = $(shell readlink -f .)
 
 VIVADO = $(XILINX_VIVADO)/bin/vivado
 JOBS ?= 8
-VIV_PRJ_DIR = $(PWD)/runs/hdmi_advss_ced_prj
+VIV_PRJ_DIR = $(PWD)/runs/hdmi
 VIV_SCRIPTS_DIR = scripts
 
 VIV_TIMING_ERROR = "CRITICAL WARNING: \[Timing 38-282\] The design failed to meet the timing requirements"

@@ -1,6 +1,4 @@
-# HDMI ADVSS Hardware Design
-
-## Introduction
+## HDMI ADVSS Hardware Design
 
 The HDMI ADVSS hardware design targets:
 - **HDMI 2.1 RX → HDMI 2.1 TX passthrough pipeline** at **8Kp30 @ 8bpp**
@@ -8,11 +6,11 @@ The HDMI ADVSS hardware design targets:
 
 The hardware design is targeted for the **VEK385 Rev-B board**.
 
-## Tools Version
+### Tools Version
 
 - **Vivado™ 2025.2**
 
-## Build Instructions
+### Build Instructions
 
 To build the hardware design:
 
@@ -21,7 +19,7 @@ To build the hardware design:
    ```bash
    make xsa
 
-3. The output XSA file will be available in `\hdmi\hw\runs\hdmi_advss_ced_prj\`
+3. The output XSA file will be available in `\hdmi\hw\runs\hdmi\`
 
 
 ## License
