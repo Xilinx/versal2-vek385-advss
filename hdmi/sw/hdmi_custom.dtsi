@@ -1,0 +1,43 @@
+/*Copyright (c) 2026 Advanced Micro Devices, Inc.*/
+/*SPDX-License-Identifier: MIT
+/* -----------------------------------------------*/
+/* System User Device Tree Customizations */
+
+&amba {
+    ref40: ref40m {
+        compatible = "fixed-clock";
+        #clock-cells = <0>;
+        clock-frequency = <40000000>;
+    };
+    
+    xfmc: xv_fmc {
+        compatible = "vfmc";
+    };
+    
+    cips_ss_0_axi_iic_0 {
+        idt_241: clock-generator@6c {
+            compatible = "idt,idt8t49";
+            #clock-cells = <1>;
+            reg = <0x6c>;
+            clocks = <&ref40>;
+            clock-frequency = <148500000>;
+            clock-names = "input-xtal";
+        };
+        
+        ti_tmds1204_tx: ti_tmds1204-tx@5e {
+            compatible = "ti_tmds1204,ti_tmds1204-tx";
+            #clock-cells = <1>;
+            reg = <0x5e>;
+            clocks = <&ref40>;
+            clock-frequency = <148500000>;
+            clock-names = "input-xtal";
+        };
+    };
+    
+    hdmiphy_ss_0_hdmi_gt_controller {
+        clocks = <&misc_clk_0>, <&misc_clk_0>, <&misc_clk_2>, <&misc_clk_2>, <&misc_clk_3>, <&misc_clk_1>, <&misc_clk_1>, <&misc_clk_1>, <&misc_clk_0>, <&misc_clk_1>, <&misc_clk_0>, <&misc_clk_0>, <&idt_241 1>;
+        clock-names = "apb_clk", "axi4lite_aclk", "gt_refclk0_odiv2", "gt_refclk1_odiv2", "gt_refclk5_odiv2", "gt_rxusrclk", "gt_txusrclk", "rx_axi4s_aclk", "sb_aclk", "tx_axi4s_aclk", "vid_phy_axi4lite_aclk", "drpclk", "tmds_clock";
+        xlnx,hdmi-connector = <&xfmc>;
+    };
+};
+
