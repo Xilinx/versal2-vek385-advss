@@ -11,6 +11,8 @@ JOBS ?= 8
 VIV_PRJ_DIR = $(PWD)/runs/hdmi_advss_ced_prj
 VIV_SCRIPTS_DIR = scripts
 
+VIV_TIMING_ERROR = "CRITICAL WARNING: \[Timing 38-282\] The design failed to meet the timing requirements"
+
 VIV_DESIGN = versal_gen2_platform
 VIV_XSA = $(VIV_PRJ_DIR)/$(VIV_DESIGN).xsa
 VIV_SRC = $(VIV_SCRIPTS_DIR)/main.tcl
