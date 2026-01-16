@@ -13,7 +13,7 @@ VIV_SCRIPTS_DIR = scripts
 
 VIV_TIMING_ERROR = "CRITICAL WARNING: \[Timing 38-282\] The design failed to meet the timing requirements"
 
-VIV_DESIGN = versal_gen2_platform
+VIV_DESIGN = hdmi
 VIV_XSA = $(VIV_PRJ_DIR)/$(VIV_DESIGN).xsa
 VIV_SRC = $(VIV_SCRIPTS_DIR)/main.tcl
 
