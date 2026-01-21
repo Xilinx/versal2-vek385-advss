@@ -1,3 +1,9 @@
+## License
+
+#Copyright (C) 2026 Advanced Micro Devices, Inc.
+#SPDX-License-Identifier: MIT
+
+
 ## HDMI ADVSS Hardware Design
 
 The HDMI ADVSS hardware design targets:
@@ -22,7 +28,3 @@ To build the hardware design:
 3. The output XSA file will be available in `\hdmi\hw\runs\hdmi\`
 
 
-## License
-
-Copyright (C) 2026 Advanced Micro Devices, Inc.
-SPDX-License-Identifier: MIT

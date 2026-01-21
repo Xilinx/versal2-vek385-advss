@@ -10,20 +10,10 @@ BRANCH := refs/tags/amd-edf-rel-v25.11
 MANIFEST := default-edf.xml
 XSA:= $(current_dir)/../hw/runs/hdmi_advss_ced_prj/hdmi_advss.xsa
 SDTDIR := $(current_dir)/sdt_out_hdmi_advss
-#MACHINE_NAME := l20-mrmac
  
 # Default target
-all: sdt-gen repo-init env-setup build custom-pl-dtsi artifacts
+all: repo-init env-setup build custom-pl-dtsi artifacts
 
-
-# Generate System Device Tree using
-sdt-gen:
-	source /proj/xbuilds/2025.2_released/installs/lin64/2025.2/Vivado/settings64.sh && \
-	sdtgen << EOF
-set_dt_param -dir sdt_out_hdmi_advss -xsa $(XSA) -board_dts versal2-vek385-revb
-generate_sdt
-exit
-EOF
 
 # Initialize the repo
 repo-init:
@@ -61,22 +51,7 @@ custom-pl-dtsi:
 	else \
 		echo "No hdmi_custom.dtsi file found. Skipping HDMI customization step."; \
 	fi
-	@echo "Checking for system_user.dtsi to apply to pl.dtsi..."
-	@if [ -f "system_user.dtsi" ]; then \
-		echo "Applying system_user.dtsi to pl.dtsi..."; \
-		if [ -f "./build/conf/dts/versal-2ve-2vm-vek385-revb-sdt-seg/pl-overlay-full/pl.dtsi" ]; then \
-			echo "Appending system_user.dtsi content to pl.dtsi..."; \
-			echo "" >> ./build/conf/dts/versal-2ve-2vm-vek385-revb-sdt-seg/pl-overlay-full/pl.dtsi; \
-			echo "/* System user customizations from system_user.dtsi */" >> ./build/conf/dts/versal-2ve-2vm-vek385-revb-sdt-seg/pl-overlay-full/pl.dtsi; \
-			cat system_user.dtsi >> ./build/conf/dts/versal-2ve-2vm-vek385-revb-sdt-seg/pl-overlay-full/pl.dtsi; \
-			echo "system_user.dtsi applied successfully."; \
-		else \
-			echo "Error: pl.dtsi file not found. Build may have failed."; \
-			exit 1; \
-		fi; \
-	else \
-		echo "No system_user.dtsi file found. Skipping system user customization step."; \
-	fi
+
 # copy the artifacts to images directory 
 artifacts:
 	@TMPDIR=$$(grep '^TMPDIR' ./build/conf/local.conf | cut -d '=' -f2 | tr -d ' "') && \
