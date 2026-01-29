@@ -24,27 +24,27 @@ create_bd_design ${::bd_name}
 instantiate_example_design -template xilinx.com:design:versal_comn_platform:2.0  -design $bd_name -options { Board_selection.VALUE VEK385}
 
 # delete GPIOs
-startgroup
+
 delete_bd_objs [get_bd_intf_nets axi_bram_ctrl_0_BRAM_PORTA] [get_bd_intf_nets axi_bram_ctrl_0_BRAM_PORTB] [get_bd_intf_nets axi_gpio_0_GPIO] [get_bd_intf_nets ctrl_smc_M00_AXI] [get_bd_intf_nets axi_gpio_1_GPIO] [get_bd_intf_nets ctrl_smc_M01_AXI] [get_bd_intf_nets ctrl_smc_M02_AXI] [get_bd_intf_nets ctrl_smc_M03_AXI] [get_bd_intf_nets axi_gpio_2_GPIO] [get_bd_cells axi_bram_ctrl_0] [get_bd_cells axi_bram_ctrl_0_bram] [get_bd_cells axi_gpio_0] [get_bd_cells axi_gpio_1] [get_bd_cells axi_gpio_2] [get_bd_nets axi_gpio_1_ip2intc_irpt] [get_bd_nets axi_gpio_2_ip2intc_irpt] [get_bd_intf_nets axi_uart16550_0_UART] [get_bd_intf_nets ctrl_smc_M01_AXI] [get_bd_cells axi_uart16550_0] [get_bd_intf_ports gpio_dp] [get_bd_intf_ports gpio_led] [get_bd_intf_ports gpio_pb] [get_bd_intf_ports pl_uart_bank705]
-endgroup
+
 # configure NoC
-startgroup
+
 set_property CONFIG.NUM_NMI {8} [get_bd_cells Master_NoC]
 set_property CONFIG.NUM_NSI {11} [get_bd_cells NoC_C0_C1]
 set_property CONFIG.NUM_NSI {5} [get_bd_cells NoC_C2_C3]
-endgroup
-startgroup
+
+
 set_property -dict [list CONFIG.CONNECTIONS {MC_0 {read_bw {500} write_bw {500} read_avg_burst {4} write_avg_burst {4} initial_boot {false}}}] [get_bd_intf_pins /NoC_C0_C1/S05_INI]
 set_property -dict [list CONFIG.CONNECTIONS {MC_0 {read_bw {500} write_bw {500} read_avg_burst {4} write_avg_burst {4} initial_boot {false}}}] [get_bd_intf_pins /NoC_C0_C1/S06_INI]
 set_property -dict [list CONFIG.CONNECTIONS {MC_0 {read_bw {500} write_bw {500} read_avg_burst {4} write_avg_burst {4} initial_boot {false}}}] [get_bd_intf_pins /NoC_C0_C1/S07_INI]
 set_property -dict [list CONFIG.CONNECTIONS {MC_0 {read_bw {500} write_bw {500} read_avg_burst {4} write_avg_burst {4} initial_boot {false}}}] [get_bd_intf_pins /NoC_C0_C1/S08_INI]
 set_property -dict [list CONFIG.CONNECTIONS {MC_0 {read_bw {500} write_bw {500} read_avg_burst {4} write_avg_burst {4} initial_boot {false}}}] [get_bd_intf_pins /NoC_C0_C1/S09_INI]
 set_property -dict [list CONFIG.CONNECTIONS {MC_0 {read_bw {500} write_bw {500} read_avg_burst {4} write_avg_burst {4} initial_boot {false}}}] [get_bd_intf_pins /NoC_C0_C1/S10_INI]
-endgroup
-startgroup
+
+
 set_property -dict [list CONFIG.CONNECTIONS {MC_1 {read_bw {500} write_bw {500} read_avg_burst {4} write_avg_burst {4} initial_boot {false} }}] [get_bd_intf_pins /NoC_C2_C3/S03_INI]
 set_property -dict [list CONFIG.CONNECTIONS {MC_1 {read_bw {500} write_bw {500} read_avg_burst {4} write_avg_burst {4} initial_boot {false} }}] [get_bd_intf_pins /NoC_C2_C3/S04_INI]
-endgroup
+
 # configure Master NoC 
 set Master_NoC_S00_AXI [concat [list M07_INI {read_bw {500} write_bw {500} initial_boot {false}}] [get_property CONFIG.CONNECTIONS [get_bd_intf_pins /Master_NoC/S00_AXI]]]
 set Master_NoC_S01_AXI [concat [list M07_INI {read_bw {500} write_bw {500} initial_boot {false}}] [get_property CONFIG.CONNECTIONS [get_bd_intf_pins /Master_NoC/S01_AXI]]]
@@ -88,7 +88,7 @@ connect_bd_intf_net -boundary_type upper [get_bd_intf_pins vcu2_ss/M01_INI] [get
 connect_bd_intf_net -boundary_type upper [get_bd_intf_pins vcu2_ss/M02_INI] [get_bd_intf_pins /NoC_C0_C1/S07_INI]
 connect_bd_intf_net -boundary_type upper [get_bd_intf_pins vcu2_ss/M03_INI] [get_bd_intf_pins /NoC_C0_C1/S08_INI]
 # clk wizard
-startgroup
+
 set_property -dict [list \
   CONFIG.CLKOUT_PORT {clk_150,clk_300,clk_450,clk_out4,clk_out5,clk_out6,clk_out7} \
   CONFIG.CLKOUT_REQUESTED_DUTY_CYCLE {50.000,50.000,50.000,50.000,50.000,50.000,50.000} \
@@ -96,15 +96,15 @@ set_property -dict [list \
   CONFIG.CLKOUT_USED {true,true,true,false,false,false,false} \
 ] [get_bd_cells clk_wizard_0]
 
-endgroup
+
 # configure smart connect
-startgroup
+
 delete_bd_objs [get_bd_intf_nets ctrl_smc_M04_AXI] [get_bd_intf_nets ctrl_smc_M05_AXI]
 set_property -dict [list \
   CONFIG.NUM_CLKS {2} \
   CONFIG.NUM_MI {3} \
 ] [get_bd_cells ctrl_smc]
-endgroup
+
 #smc connection
 connect_bd_intf_net [get_bd_intf_pins ctrl_smc/M00_AXI] [get_bd_intf_pins pl_mmi_clk_wiz/s_axi_lite]
 connect_bd_intf_net [get_bd_intf_pins ctrl_smc/M01_AXI] -boundary_type upper [get_bd_intf_pins hdmi_ss/S00_AXI]
@@ -118,9 +118,9 @@ connect_bd_net [get_bd_pins rst_clk/peripheral_aresetn] [get_bd_pins pl_mmi_clk_
 
 
 # proc_rst_300M
-startgroup
+
 create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset:5.0 proc_sys_reset_0
-endgroup
+
 set_property name proc_sys_reset_300M [get_bd_cells proc_sys_reset_0]
 connect_bd_net [get_bd_pins proc_sys_reset_300M/ext_reset_in] [get_bd_pins ps_wizard_0/pl0_resetn]
 connect_bd_net [get_bd_pins proc_sys_reset_300M/slowest_sync_clk] [get_bd_pins clk_wizard_0/clk_300]
@@ -156,13 +156,13 @@ connect_bd_net [get_bd_pins vcu2_ss/s_axi_lite_rst_n] [get_bd_pins rst_clk/perip
 connect_bd_net [get_bd_pins ps_wizard_0/pl1_ref_clk] [get_bd_pins vcu2_ss/dpll_ref_clk]
 
 # External interfaces
-startgroup
+
 make_bd_pins_external  [get_bd_pins hdmi_ss/RX_DET_N_n] [get_bd_pins hdmi_ss/TX_HPD_IN] [get_bd_pins hdmi_ss/IDT8T49N241_LOL_IN]   [get_bd_pins hdmi_ss/RX_HPD_OUT] [get_bd_pins hdmi_ss/RX_REFCLK_P_OUT] [get_bd_pins hdmi_ss/RX_REFCLK_N_OUT] [get_bd_pins hdmi_ss/TX_TI_ENABLE] [get_bd_pins hdmi_ss/LED0]
-endgroup
-startgroup
+
+
 make_bd_intf_pins_external  [get_bd_intf_pins hdmi_ss/GT_DRU_FRL_CLK_IN] [get_bd_intf_pins hdmi_ss/TX_REFCLK_P_IN_V] [get_bd_intf_pins hdmi_ss/HDMI_RX_CLK_P_IN_V] [get_bd_intf_pins hdmi_ss/GT_Serial] [get_bd_intf_pins hdmi_ss/RX_DDC_OUT] [get_bd_intf_pins hdmi_ss/HDMI_CTRL] [get_bd_intf_pins hdmi_ss/TX_DDC_OUT]
-endgroup
-startgroup
+
+
 set_property name GT_DRU_FRL_CLK_IN [get_bd_intf_ports GT_DRU_FRL_CLK_IN_0]
 set_property CONFIG.FREQ_HZ 400000000 [get_bd_intf_ports /GT_DRU_FRL_CLK_IN] 
 set_property name TX_REFCLK_P_IN_V [get_bd_intf_ports TX_REFCLK_P_IN_V_0]
@@ -171,8 +171,8 @@ set_property name GT_Serial [get_bd_intf_ports GT_Serial_0]
 set_property name RX_DDC_OUT [get_bd_intf_ports RX_DDC_OUT_0]
 set_property name HDMI_CTRL [get_bd_intf_ports HDMI_CTRL_0]
 set_property name TX_DDC_OUT [get_bd_intf_ports TX_DDC_OUT_0]
-endgroup
-startgroup
+
+
 set_property name RX_DET_N_n [get_bd_ports RX_DET_N_n_0]
 set_property name TX_HPD_IN [get_bd_ports TX_HPD_IN_0]
 set_property name IDT8T49N241_LOL_IN [get_bd_ports IDT8T49N241_LOL_IN_0]
@@ -183,7 +183,7 @@ set_property name TX_TI_ENABLE [get_bd_ports TX_TI_ENABLE_0]
 create_bd_port -dir O RX_TI_ENABLE
 connect_bd_net [get_bd_ports RX_TI_ENABLE] [get_bd_pins hdmi_ss/TX_TI_ENABLE]
 set_property name LED0 [get_bd_ports LED0_0]
-endgroup
+
 
 assign_bd_address
 regenerate_bd_layout
