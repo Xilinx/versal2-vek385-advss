@@ -20,7 +20,7 @@ YOCTO_DIR := $(BUILD_BASE)/yocto-edf-25.11
 
 # Build target configuration
 MACHINE := versal-2ve-2vm-vek385-revb-sdt-seg
-XSA_FILE ?= $(BUILD_BASE)/hw/runs/hdmi/hdmi.xsa
+SDT_DIR := $(BUILD_BASE)/../hw/hdmi_sdt
 IMAGE_OSPI := edf-ospi
 IMAGE_ROOTFS := edf-linux-disk-image
 
@@ -64,7 +64,7 @@ COLOR_CYAN := \033[36m
 # Phony Targets
 #===============================================================================
 
-.PHONY: all setup sync configure gen-machine build-ospi build-rootfs build copy-images \
+.PHONY: all setup sync configure gen-machine build-ospi build-rootfs build images \
         clean-machineconf
 
 #===============================================================================
@@ -218,7 +218,7 @@ gen-machine: configure
 		echo "Parsing hardware description and generating device tree..."; \
 		cd $(YOCTO_DIR); \
 		source edf-init-build-env; \
-		gen-machineconf parse-sdt --template $(VEK385_TEMPLATE) --hw-description $(BUILD_BASE)/../hw/hdmi_sdt || { \
+		gen-machineconf parse-sdt --template $(VEK385_TEMPLATE) --hw-description $(SDT_DIR) || { \
 			printf "%b\n" "$(COLOR_YELLOW)Error: Failed to generate machine configuration$(COLOR_RESET)"; \
 			exit 1; \
 		}; \
@@ -267,7 +267,7 @@ build-rootfs: configure
 	@echo ""
 	@cd $(YOCTO_DIR) && \
 		bash -c "source edf-init-build-env && \
-		MACHINE=$(MACHINE) bitbake $(IMAGE_ROOTFS)" || { \
+		MACHINE=amd-cortexa78-mali-common bitbake $(IMAGE_ROOTFS)" || { \
 		printf "%b\n" "$(COLOR_YELLOW)Error: Root filesystem build failed$(COLOR_RESET)"; \
 		exit 1; \
 	}
@@ -279,7 +279,7 @@ build-rootfs: configure
 # Copy Images: Copy built images to local images directory
 #===============================================================================
 
-copy-images: build-ospi build-rootfs
+images: build-ospi build-rootfs
 	@printf "%b\n" "$(COLOR_CYAN)$(COLOR_BOLD)=== Copying images to local directory ===$(COLOR_RESET)"
 	@echo ""
 	@mkdir -p $(BUILD_BASE)/images
@@ -326,7 +326,7 @@ copy-images: build-ospi build-rootfs
 # Build: Build both OSPI and RootFS images
 #===============================================================================
 
-build: copy-images
+build: images
 	@printf "%b\n" "$(COLOR_GREEN)$(COLOR_BOLD)=== All images built successfully ===$(COLOR_RESET)"
 	@echo ""
 	@echo "Output directory:"

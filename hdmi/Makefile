@@ -41,7 +41,7 @@ hw:
 	$(MAKE) -C $(HWDIR) all
 
 .PHONY: sw
-sw: hw
+sw: 
 	@echo 'Building software components...'
 	$(MAKE) -C $(SWDIR) all
 
