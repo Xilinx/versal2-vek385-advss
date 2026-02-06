@@ -166,11 +166,16 @@ configure: sync
 		if ! grep -q '^BB_NUMBER_THREADS = ' conf/local.conf 2>/dev/null; then \
 			echo 'BB_NUMBER_THREADS = "$(BB_NUMBER_THREADS)"' >> conf/local.conf; \
 			echo '  Set BB_NUMBER_THREADS to $(BB_NUMBER_THREADS)'; \
-		fi \
+		fi && \
+		if ! grep -q 'IMAGE_INSTALL:append = ' conf/local.conf 2>/dev/null; then \
+			echo 'IMAGE_INSTALL:append = "kernel-module-hdmi21"' >> conf/local.conf; \
+			echo 'hdmi modules added in the local.conf '; \
+		fi; \
 	else \
 		echo ""; \
 		echo "conf/local.conf file exist"; \
 	fi
+
 	@echo "Build configuration:"
 	@echo "  Working directory: $(WORK_DIR)"
 	@echo "  Yocto location:    $(YOCTO_DIR)"
@@ -182,27 +187,6 @@ configure: sync
 	@printf "%b\n" "$(COLOR_GREEN)Build environment configuration complete$(COLOR_RESET)"
 	@echo ""
 
-#===============================================================================
-# Check XSA: Verify XSA file exists before building
-#===============================================================================
-
-check-xsa: $(XSA_FILE)
-
-$(XSA_FILE):
-	@if [ ! -f "$(XSA_FILE)" ]; then \
-		printf "%b\n" "$(COLOR_YELLOW)$(COLOR_BOLD)ERROR: XSA file not found!$(COLOR_RESET)"; \
-		echo ""; \
-		echo "Expected location: $(XSA_FILE)"; \
-		echo ""; \
-		echo "Please provide the hardware design XSA file using one of:"; \
-		echo "  1. Place XSA at: $(XSA_FILE)"; \
-		echo "  2. Specify path: make XSA_FILE=/path/to/design.xsa build"; \
-		echo ""; \
-		exit 1; \
-	else \
-		printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) XSA file: $(XSA_FILE)"; \
-	fi
-
 
 #===============================================================================
 # Generate Machine: Parse SDT and generate machine configuration
@@ -212,7 +196,6 @@ gen-machine: configure
 	@if [ ! -d $(YOCTO_DIR)/build/conf/dts ]; then \
 		printf "%b\n" "$(COLOR_CYAN)$(COLOR_BOLD)=== Generating machine configuration ===$(COLOR_RESET)"; \
 		echo ""; \
-		echo "XSA file:     $(XSA_FILE)"; \
 		echo "Machine:      $(MACHINE)"; \
 		echo ""; \
 		echo "Parsing hardware description and generating device tree..."; \
@@ -230,7 +213,7 @@ gen-machine: configure
 		echo ""; \
 	else \
 		echo ""; \
-		echo "gen-machineconf alredy configured"; \
+		echo "gen-machineconf already configured"; \
 	fi
 	@printf "%b\n" "$(COLOR_GREEN)gen-machineconf complete$(COLOR_RESET)"
 
@@ -279,10 +262,10 @@ build-rootfs: configure
 # Copy Images: Copy built images to local images directory
 #===============================================================================
 
-images: build-ospi build-rootfs
+artifacts: build-ospi build-rootfs
 	@printf "%b\n" "$(COLOR_CYAN)$(COLOR_BOLD)=== Copying images to local directory ===$(COLOR_RESET)"
 	@echo ""
-	@mkdir -p $(BUILD_BASE)/images
+	@mkdir -p $(BUILD_BASE)/artifacts
 	@if [ "$(IS_NFS)" = "yes" ]; then \
 		ACTUAL_TMPDIR=$$(cd $(YOCTO_DIR) && source edf-init-build-env && echo "$$TMPDIR"); \
 		DEPLOY_DIR="$$ACTUAL_TMPDIR/deploy/images/$(MACHINE)"; \
@@ -290,11 +273,12 @@ images: build-ospi build-rootfs
 	else \
 		DEPLOY_DIR="$(YOCTO_DIR)/build/tmp/deploy/images/$(MACHINE)"; \
 	fi; \
+	sleep 5
 	echo "Copying from: $$DEPLOY_DIR"; \
-	echo "Copying to: $(BUILD_BASE)/images/"; \
+	echo "Copying to: $(BUILD_BASE)/artifacts/"; \
 	echo ""; \
 	if [ -f "$$DEPLOY_DIR/edf-ospi-$(MACHINE).bin" ]; then \
-		cp "$$DEPLOY_DIR/edf-ospi-$(MACHINE).bin" $(BUILD_BASE)/images/ospi.bin; \
+		cp "$$DEPLOY_DIR/edf-ospi-$(MACHINE).bin" $(BUILD_BASE)/artifacts/ospi.bin; \
 		printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied ospi.bin"; \
 	else \
 		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) OSPI image not found: edf-ospi-$(MACHINE).bin"; \
@@ -302,7 +286,7 @@ images: build-ospi build-rootfs
 		find /scratch/$(USER) -name "*ospi*.bin" -type f 2>/dev/null | head -5; \
 	fi; \
 	if [ -f "$$DEPLOY_DIR/$(IMAGE_ROOTFS)-$(MACHINE).wic.xz" ]; then \
-		cp "$$DEPLOY_DIR/$(IMAGE_ROOTFS)-$(MACHINE).wic.xz" $(BUILD_BASE)/images/edf-linux.wic.xz; \
+		cp "$$DEPLOY_DIR/$(IMAGE_ROOTFS)-$(MACHINE).wic.xz" $(BUILD_BASE)/artifacts/edf-linux.wic.xz; \
 		printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied edf-linux.wic.xz"; \
 	else \
 		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) RootFS image not found: $(IMAGE_ROOTFS)-$(MACHINE).wic.xz"; \
@@ -310,23 +294,23 @@ images: build-ospi build-rootfs
 		find /scratch/$(USER) -name "*linux-disk-image*.wic.xz" -type f 2>/dev/null | head -5; \
 	fi; \
 	if [ -f "$(YOCTO_DIR)/build/conf/dts/$(MACHINE)/pl-overlay-full/pl.dtsi" ]; then \
-		cp "$(YOCTO_DIR)/build/conf/dts/$(MACHINE)/pl-overlay-full/pl.dtsi" $(BUILD_BASE)/images/pl.dtsi; \
+		cp "$(YOCTO_DIR)/build/conf/dts/$(MACHINE)/pl-overlay-full/pl.dtsi" $(BUILD_BASE)/artifacts/pl.dtsi; \
 		printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied pl.dtsi"; \
 	else \
 		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) pl.dtsi not found: $(YOCTO_DIR)/build/conf/dts/$(MACHINE)/pl-overlay-full/pl.dtsi"; \
 	fi
 	@echo ""
-	@echo "Images copied to: $(BUILD_BASE)/images/"
-	@ls -lh $(BUILD_BASE)/images/ 2>/dev/null || echo "Directory listing unavailable"
+	@echo "Images copied to: $(BUILD_BASE)/artifacts/"
+	@ls -lh $(BUILD_BASE)/artifacts/ 2>/dev/null || echo "Directory listing unavailable"
 	@echo ""
-	@printf "%b\n" "$(COLOR_GREEN)Image copy complete$(COLOR_RESET)"
+	@printf "%b\n" "$(COLOR_GREEN)Images copy complete$(COLOR_RESET)"
 	@echo ""
 
 #===============================================================================
 # Build: Build both OSPI and RootFS images
 #===============================================================================
 
-build: images
+build: artifacts
 	@printf "%b\n" "$(COLOR_GREEN)$(COLOR_BOLD)=== All images built successfully ===$(COLOR_RESET)"
 	@echo ""
 	@echo "Output directory:"
@@ -337,7 +321,7 @@ build: images
 	fi
 	@echo ""
 	@echo "Local images directory:"
-	@echo "  $(BUILD_BASE)/images/"
+	@echo "  $(BUILD_BASE)/artifacts/"
 	@echo ""
 	@echo "Key files copied:"
 	@echo "  - ospi.bin (OSPI boot image)"
