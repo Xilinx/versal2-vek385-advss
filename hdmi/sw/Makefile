@@ -261,50 +261,44 @@ build-rootfs: configure
 #===============================================================================
 # Copy Images: Copy built images to local images directory
 #===============================================================================
-
 artifacts: build-ospi build-rootfs
 	@printf "%b\n" "$(COLOR_CYAN)$(COLOR_BOLD)=== Copying images to local directory ===$(COLOR_RESET)"
-	@echo ""
 	@mkdir -p $(BUILD_BASE)/artifacts
-	@if [ "$(IS_NFS)" = "yes" ]; then \
-		ACTUAL_TMPDIR=$$(cd $(YOCTO_DIR) && source edf-init-build-env && echo "$$TMPDIR"); \
-		DEPLOY_DIR="$$ACTUAL_TMPDIR/deploy/images/$(MACHINE)"; \
-		echo "Detected TMPDIR: $$ACTUAL_TMPDIR"; \
+	@set -e; \
+	if [ "$(IS_NFS)" = "yes" ]; then \
+		DEPLOY_DIR_OSPI="$(YOCTO_TMP_DIR)/deploy/images/$(MACHINE)"; \
+		DEPLOY_DIR_ROOTFS="$(YOCTO_TMP_DIR)/deploy/images/amd-cortexa78-mali-common"; \
 	else \
-		DEPLOY_DIR="$(YOCTO_DIR)/build/tmp/deploy/images/$(MACHINE)"; \
+		DEPLOY_DIR_OSPI="$(YOCTO_DIR)/build/tmp/deploy/images/$(MACHINE)"; \
+		DEPLOY_DIR_ROOTFS="$(YOCTO_DIR)/build/tmp/deploy/images/amd-cortexa78-mali-common"; \
 	fi; \
-	sleep 5
-	echo "Copying from: $$DEPLOY_DIR"; \
-	echo "Copying to: $(BUILD_BASE)/artifacts/"; \
+	OSPI_SRC="$$DEPLOY_DIR_OSPI/edf-ospi-$(MACHINE).bin"; \
+	ROOTFS_SRC="$$DEPLOY_DIR_ROOTFS/edf-linux-disk-image-amd-cortexa78-mali-common.rootfs.wic.xz"; \
+	echo "OSPI Source:   $$OSPI_SRC"; \
+	echo "RootFS Source: $$ROOTFS_SRC"; \
 	echo ""; \
-	if [ -f "$$DEPLOY_DIR/edf-ospi-$(MACHINE).bin" ]; then \
-		cp "$$DEPLOY_DIR/edf-ospi-$(MACHINE).bin" $(BUILD_BASE)/artifacts/ospi.bin; \
-		printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied ospi.bin"; \
+	if [ -f "$$OSPI_SRC" ]; then \
+		cp "$$OSPI_SRC" $(BUILD_BASE)/artifacts/; \
+		printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied edf-ospi-$(MACHINE).bin"; \
 	else \
-		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) OSPI image not found: edf-ospi-$(MACHINE).bin"; \
-		echo "Searching for OSPI images..."; \
-		find /scratch/$(USER) -name "*ospi*.bin" -type f 2>/dev/null | head -5; \
+		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) OSPI NOT FOUND"; \
 	fi; \
-	if [ -f "$$DEPLOY_DIR/$(IMAGE_ROOTFS)-$(MACHINE).wic.xz" ]; then \
-		cp "$$DEPLOY_DIR/$(IMAGE_ROOTFS)-$(MACHINE).wic.xz" $(BUILD_BASE)/artifacts/edf-linux.wic.xz; \
-		printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied edf-linux.wic.xz"; \
+	if [ -f "$$ROOTFS_SRC" ]; then \
+		cp "$$ROOTFS_SRC" $(BUILD_BASE)/artifacts/; \
+		printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied edf-linux-disk-image-amd-cortexa78-mali-common.rootfs.wic.xz"; \
 	else \
-		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) RootFS image not found: $(IMAGE_ROOTFS)-$(MACHINE).wic.xz"; \
-		echo "Searching for rootfs images..."; \
-		find /scratch/$(USER) -name "*linux-disk-image*.wic.xz" -type f 2>/dev/null | head -5; \
+		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) RootFS NOT FOUND"; \
 	fi; \
-	if [ -f "$(YOCTO_DIR)/build/conf/dts/$(MACHINE)/pl-overlay-full/pl.dtsi" ]; then \
-		cp "$(YOCTO_DIR)/build/conf/dts/$(MACHINE)/pl-overlay-full/pl.dtsi" $(BUILD_BASE)/artifacts/pl.dtsi; \
+	PL_DTSI="$(YOCTO_DIR)/build/conf/dts/$(MACHINE)/pl-overlay-full/pl.dtsi"; \
+	if [ -f "$$PL_DTSI" ]; then \
+		cp "$$PL_DTSI" $(BUILD_BASE)/artifacts/pl.dtsi; \
 		printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied pl.dtsi"; \
 	else \
 		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) pl.dtsi not found: $(YOCTO_DIR)/build/conf/dts/$(MACHINE)/pl-overlay-full/pl.dtsi"; \
 	fi
 	@echo ""
-	@echo "Images copied to: $(BUILD_BASE)/artifacts/"
-	@ls -lh $(BUILD_BASE)/artifacts/ 2>/dev/null || echo "Directory listing unavailable"
-	@echo ""
+	@ls -lh $(BUILD_BASE)/artifacts/ 2>/dev/null
 	@printf "%b\n" "$(COLOR_GREEN)Images copy complete$(COLOR_RESET)"
-	@echo ""
 
 #===============================================================================
 # Build: Build both OSPI and RootFS images
