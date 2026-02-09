@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Advanced Micro Devices, Inc.
+# # SPDX-License-Identifier: MIT
+# # -----------------------------------------------
 # ==============================================================================
 # Makefile for EDF Yocto Build Automation
 # Platform: VEK385 with HDMI Design
