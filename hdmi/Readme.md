@@ -18,13 +18,24 @@ The hardware design is targeted for the **VEK385 Rev-B board**.
 
 ### Build Instructions
 
-To build the hardware design:
+To build the hardware design and sdt generation:
 
 1. Navigate to the `\hdmi\hw` folder.
 2. Run the following command:
    ```bash
-   make xsa
+   make all
 
 3. The output XSA file will be available in `\hdmi\hw\runs\hdmi\`
 
 
+
+## Build Instructions to build software components 
+
+To build the software artifats:
+
+1. Navigate to the `\hdmi\sw` folder.
+2. Run the following command:
+   ```bash
+   make all
+   ```
+3. The output boot images will be available in `\hdmi\sw\yocto-edf-25.11\build\tmp\deploy\images\versal-2ve-2vm-vek385-revb-sdt-seg\`
