@@ -5,7 +5,7 @@
  </tr>
 </table>
 
-This project demonstrates five Advanced Subsystems (ADVSS) targeting the **VEK385 Rev-B board**. Each subsystem showcases different video/streaming capabilities and interfaces, providing comprehensive examples for high-performance video processing and data streaming applications.
+This project demonstrates five Advanced Subsystems (ADVSS) targeting the **VEK385 Rev-B1 board**. Each subsystem showcases different video/streaming capabilities and interfaces, providing comprehensive examples for high-performance video processing and data streaming applications.
 
 The following is a list of Platform Designs available:
 | Platform Name  | Description | Links |
