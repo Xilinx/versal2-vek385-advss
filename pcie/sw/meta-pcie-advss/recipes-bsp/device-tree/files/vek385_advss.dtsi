@@ -1,0 +1,9 @@
+/ {
+    reserved-memory {
+        pciep_driver: buffer@31000000 {
+            compatible = "shared-dma-pool";
+            reg = <0x0 0x31000000 0x0 0x10000000>;
+            reusable;
+        };
+    };
+};
