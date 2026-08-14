@@ -14,7 +14,7 @@ The hardware design is targeted for the **VEK385 Rev-B1 board**.
 
 ### Tools Version
 
-- **Vivado™ 2025.2**
+- **Vivado™ 2026.1**
 
 ### Build Instructions
 
