@@ -1,6 +1,84 @@
+# Copyright (C) 2026 Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+################################################################################
+# hdmi_ss hierarchy - pin-out description
+#
+# The 'hdmi_ss' hierarchy (created by create_hier_cell_hdmi_ss) is a complete,
+# self-contained HDMI 2.1 capture/playback datapath. The pipeline is shown below:
+#
+#     HDMI Rx  ->  Frame Buffer Wr  ->  DDR  ->  Frame Buffer Rd  ->  HDMI Tx
+#                  (v_frmbuf_wr)                 (v_frmbuf_rd)
+#
+# Internally it instantiates the HDMI RX SS, HDMI TX SS, HDMI GT Controller (PHY),
+# Audio SS (ACR + pattern gen), Video Processor SS (scaler), Frame Buffer Wr/Rd,
+# clock-domain crossing FIFOs, AXI IIC, two AXI Timers, reset GPIO, and AXI
+# SmartConnect for all AXI4-Lite control. To use it standalone you only have to
+# drive the clocks/resets, hook the frame-buffer AXI-MM masters to a memory
+# controller (DDR via NoC), route the GT/board I/O to top-level ports/constraints,
+# and connect S00_AXI to a CPU/AXI master plus the interrupt outputs to your
+# interrupt controller.
+#
+# ------------------------------------------------------------------------------
+# INTERFACE PINS
+# ------------------------------------------------------------------------------
+#   S00_AXI                       [S, AXI4-Lite] Control bus for ALL internal IPs
+#                                                (RX/TX SS, GT Controller, frame
+#                                                buffers, VPSS, audio, IIC, timers,
+#                                                reset GPIO). Connect to CPU.
+#   M00_INI, M01_INI, M02_INI,    [M, INI-MM   ] NoC master ports to DDR (frame
+#   M03_INI                                      buffer write/read). Connect to
+#                                                NoC_C0_C1 or NoC_C2_C3.
+#   RX_DDC_OUT                    [M, IIC      ] HDMI RX DDC/EDID I2C to RX connector.
+#   TX_DDC_OUT                    [M, IIC      ] HDMI TX DDC I2C to TX connector.
+#   IIC_HDMI_CTRL                 [M, IIC      ] Board control I2C (clock gen/retimers).
+#   GT_DRU_FRL_CLK_IN             [S, diff clk ] DRU reference clock (differential) for
+#                                                HDMI GT Controller FRL mode.
+#
+# ------------------------------------------------------------------------------
+# CLOCKS / RESETS (all active-low resets)
+# ------------------------------------------------------------------------------
+#   s_axi_cpu_aclk                [I clk] AXI4-Lite control clock (drives S00_AXI + IPs).
+#   s_axi_cpu_aresetn             [I rst] AXI4-Lite control reset.
+#   s_axis_video_aclk             [I clk] Video/AXIS datapath clock (300 MHz for 4K60).
+#   s_axis_video_aresetn          [I rst] Video/AXIS datapath reset.
+#   frl_clk                       [I clk] FRL (Fixed Rate Link) clock (450 MHz for HDMI 2.1).
+#
+# ------------------------------------------------------------------------------
+# GT / TRANSCEIVER + BOARD I/O (route to top-level ports / constraints)
+# ------------------------------------------------------------------------------
+#   HDMI_RX_CLK_P_IN / _N_IN      [I]      RX GT reference clock (differential).
+#   TX_REFCLK_P_IN   / _N_IN      [I]      TX GT reference clock (differential).
+#   RX_REFCLK_P_OUT  / _N_OUT     [O clk]  Recovered RX ref clock out (to clock gen).
+#   HDMI_TX_DAT_N_OUT/ _P_OUT     [O 3:0]  TX GT serial data (4 FRL/TMDS lanes).
+#   HDMI_RX_DAT_N_IN / _P_IN      [I 2:0]  RX GT serial data (3 TMDS lanes, RX only).
+#
+# ------------------------------------------------------------------------------
+# HOT-PLUG / CABLE-DETECT / ENABLE SIDEBAND
+# ------------------------------------------------------------------------------
+#   RX_DET_N_n                    [I]      RX cable detect (active low) from connector.
+#   RX_HPD_OUT                    [O 0:0]  RX Hot-Plug-Detect asserted to the HDMI source.
+#   TX_HPD_IN                     [I]      TX Hot-Plug-Detect from the HDMI sink.
+#   RX_TI_ENABLE                  [O 0:0]  RX path enable (retimer / ONSEMI enable).
+#   TX_TI_ENABLE                  [O 0:0]  TX path enable (retimer / ONSEMI enable).
+#   IDT8T49N241_LOL_IN            [I]      Board clock-generator Loss-Of-Lock status in.
+#   LED0                          [O]      HDMI TX 'locked' status indicator.
+#
+# ------------------------------------------------------------------------------
+# INTERRUPTS (connect to your interrupt controller)
+# ------------------------------------------------------------------------------
+#   irq_rx                        [O intr] HDMI RX subsystem.
+#   irq_tx                        [O intr] HDMI TX subsystem.
+#   irq_vphy                      [O intr] HDMI GT Controller (Video PHY).
+#   fb_wr_irq                     [O]      Frame Buffer Write done/error.
+#   fb_rd_irq                     [O]      Frame Buffer Read done/error.
+#   irq_iic_ctrl                  [O intr] AXI IIC controller.
+#   irq_timer0                    [O]      AXI Timer 0.
+#   irq_timer1                    [O intr] AXI Timer 1.
+################################################################################
 
 ################################################################
-# This is a generated script based on design: versal_gen2_platform
+# This is a generated script based on design: edf_base
 #
 # Though there are limitations about the generated script,
 # the main purpose of this utility is to make learning
@@ -20,7 +98,7 @@ set script_folder [_tcl::get_script_folder]
 ################################################################
 # Check if script is running in correct Vivado version.
 ################################################################
-set scripts_vivado_version 2025.2
+set scripts_vivado_version 2026.1
 set current_vivado_version [version -short]
 
 if { [string first $scripts_vivado_version $current_vivado_version] == -1 } {
@@ -34,7 +112,59 @@ if { [string first $scripts_vivado_version $current_vivado_version] == -1 } {
 ################################################################
 
 # To test this script, run the following commands from Vivado Tcl console:
-# source versal_gen2_platform_script.tcl
+# source edf_base_script.tcl
+
+set bCheckIPsPassed 1
+##################################################################
+# CHECK IPs
+##################################################################
+set bCheckIPs 1
+if { $bCheckIPs == 1 } {
+   set list_check_ips "\ 
+xilinx.com:ip:video_cke_sync:*\
+xilinx.com:ip:axi_iic:*\
+xilinx.com:ip:axi_timer:*\
+xilinx.com:ip:smartconnect:*\
+xilinx.com:inline_hdl:ilconstant:*\
+xilinx.com:ip:axi_noc2:*\
+xilinx.com:ip:axi_gpio:*\
+xilinx.com:inline_hdl:ilslice:*\
+xilinx.com:ip:v_frmbuf_rd:*\
+xilinx.com:ip:util_ds_buf:*\
+xilinx.com:ip:v_frmbuf_wr:*\
+xilinx.com:ip:v_proc_ss:*\
+xilinx.com:ip:v_hdmi_rxss1:*\
+xilinx.com:ip:axis_register_slice:*\
+xilinx.com:ip:xlconstant:*\
+xilinx.com:ip:v_hdmi_txss1:*\
+xilinx.com:ip:hdmi_gt_controller:*\
+xilinx.com:inline_hdl:ilreduced_logic:*\
+xilinx.com:inline_hdl:ilconcat:*\
+xilinx.com:ip:bufg_gt:*\
+xilinx.com:ip:gtwiz_versal:*\
+"
+
+   set list_ips_missing ""
+   common::send_gid_msg -ssname BD::TCL -id 2011 -severity "INFO" "Checking if the following IPs exist in the project's IP catalog: $list_check_ips ."
+
+   foreach ip_vlnv $list_check_ips {
+      set ip_obj [get_ipdefs -all $ip_vlnv]
+      if { $ip_obj eq "" } {
+         lappend list_ips_missing $ip_vlnv
+      }
+   }
+
+   if { $list_ips_missing ne "" } {
+      catch {common::send_gid_msg -ssname BD::TCL -id 2012 -severity "ERROR" "The following IPs are not found in the IP Catalog:\n  $list_ips_missing\n\nResolution: Please add the repository containing the IP(s) to the project." }
+      set bCheckIPsPassed 0
+   }
+
+}
+
+if { $bCheckIPsPassed != 1 } {
+  common::send_gid_msg -ssname BD::TCL -id 2023 -severity "WARNING" "Will not continue with creation of design due to the error(s) above."
+  return 3
+}
 
 ##################################################################
 # DESIGN PROCs
@@ -195,7 +325,7 @@ LCPLL TX_LANE_DESKEW_HDMI_ENABLE true TX_REFCLK_SOURCE R5 TX_USER_DATA_WIDTH 40 
 LCPLL TX_LANE_DESKEW_HDMI_ENABLE true TX_REFCLK_SOURCE R5 TX_USER_DATA_WIDTH 40 TX_INT_DATA_WIDTH 40 TX_LINE_RATE 10.0 TX_REFCLK_FREQUENCY 400.0} \
     CONFIG.INTF0_GT_SETTINGS(LR9_SETTINGS) {PRESET None GT_DIRECTION SIMPLEX_TX TX_PLL_TYPE LCPLL TX_DATA_ENCODING RAW TX_BUFFER_MODE 1 TX_OUTCLK_SOURCE TXPROGDIVCLK TXPROGDIV_FREQ_ENABLE true TXPROGDIV_FREQ_SOURCE\
 LCPLL TX_LANE_DESKEW_HDMI_ENABLE true TX_REFCLK_SOURCE R5 TX_USER_DATA_WIDTH 40 TX_INT_DATA_WIDTH 40 TX_LINE_RATE 12.0 TX_REFCLK_FREQUENCY 400.0} \
-    CONFIG.INTF0_PARENTID {versal_gen2_platform_hdmi_gt_controller_0} \
+    CONFIG.INTF0_PARENTID {edf_base_hdmi_gt_controller_0} \
     CONFIG.INTF1_GT_DIRECTION {SIMPLEX_RX} \
     CONFIG.INTF1_GT_SETTINGS(GT_DIRECTION) {SIMPLEX_RX} \
     CONFIG.INTF1_GT_SETTINGS(GT_TYPE) {GTYP} \
@@ -220,7 +350,7 @@ LCPLL TX_LANE_DESKEW_HDMI_ENABLE true TX_REFCLK_SOURCE R5 TX_USER_DATA_WIDTH 40 
     CONFIG.INTF1_GT_SETTINGS(LR9_SETTINGS) {PRESET None GT_DIRECTION SIMPLEX_RX RX_PLL_TYPE RPLL RX_DATA_DECODING RAW RX_BUFFER_MODE 1 RX_REFCLK_SOURCE R5 RX_USER_DATA_WIDTH 40 RX_INT_DATA_WIDTH 40 RX_LINE_RATE\
 12.0 RX_REFCLK_FREQUENCY 400.0 RX_EQ_MODE DFE} \
     CONFIG.INTF1_NO_OF_LANES {4} \
-    CONFIG.INTF1_PARENTID {versal_gen2_platform_hdmi_gt_controller_0} \
+    CONFIG.INTF1_PARENTID {edf_base_hdmi_gt_controller_0} \
     CONFIG.INTF_PARENT_PIN_LIST {QUAD0_TX0 /hdmi_ss/hdmiphy_ss/hdmi_gt_controller/gt_tx0 QUAD0_TX1 /hdmi_ss/hdmiphy_ss/hdmi_gt_controller/gt_tx1 QUAD0_TX2 /hdmi_ss/hdmiphy_ss/hdmi_gt_controller/gt_tx2\
 QUAD0_TX3 /hdmi_ss/hdmiphy_ss/hdmi_gt_controller/gt_tx3 QUAD0_RX0 /hdmi_ss/hdmiphy_ss/hdmi_gt_controller/gt_rx0 QUAD0_RX1 /hdmi_ss/hdmiphy_ss/hdmi_gt_controller/gt_rx1 QUAD0_RX2 /hdmi_ss/hdmiphy_ss/hdmi_gt_controller/gt_rx2\
 QUAD0_RX3 /hdmi_ss/hdmiphy_ss/hdmi_gt_controller/gt_rx3} \
@@ -467,8 +597,6 @@ proc create_hier_cell_hdmi_tx_ss { parentCell nameHier } {
   create_bd_pin -dir I -type clk s_axi_cpu_aclk
   create_bd_pin -dir I -type rst s_axi_cpu_aresetn
   create_bd_pin -dir I -type gt_usrclk link_clk
-  create_bd_pin -dir I -type clk s_axis_audio_aclk
-  create_bd_pin -dir I -type rst s_axis_audio_aresetn
   create_bd_pin -dir I -type clk video_clk
   create_bd_pin -dir I -from 19 -to 0 acr_cts
   create_bd_pin -dir I -from 19 -to 0 acr_n
@@ -476,7 +604,6 @@ proc create_hier_cell_hdmi_tx_ss { parentCell nameHier } {
   create_bd_pin -dir I TX_HPD_IN
   create_bd_pin -dir O -type intr irq_tx
   create_bd_pin -dir I -type clk frl_clk
-  create_bd_pin -dir I fid
   create_bd_pin -dir O LED0
   create_bd_pin -dir I video_cke_in
   create_bd_pin -dir I -type clk s_axis_video_aclk
@@ -496,7 +623,7 @@ proc create_hier_cell_hdmi_tx_ss { parentCell nameHier } {
     CONFIG.C_INCLUDE_HDCP {false} \
     CONFIG.C_INCLUDE_HDCP_1_4 {false} \
     CONFIG.C_INCLUDE_HDCP_2_2 {false} \
-    CONFIG.C_INPUT_PIXELS_PER_CLOCK {8} \
+    CONFIG.C_INPUT_PIXELS_PER_CLOCK {4} \
     CONFIG.C_MAX_BITS_PER_COMPONENT {12} \
     CONFIG.C_VALIDATION_ENABLE {false} \
     CONFIG.C_VID_INTERFACE {0} \
@@ -506,6 +633,11 @@ proc create_hier_cell_hdmi_tx_ss { parentCell nameHier } {
 
   # Create instance: tx_video_axis_reg_slice, and set properties
   set tx_video_axis_reg_slice [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_register_slice tx_video_axis_reg_slice ]
+
+  # Create instance: xlconstant_0, and set properties
+  set xlconstant_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:xlconstant xlconstant_0 ]
+  set_property CONFIG.CONST_VAL {0} $xlconstant_0
+
 
   # Create interface connections
   connect_bd_intf_net -intf_net audio_ss_0_axis_audio_out [get_bd_intf_pins AUDIO_IN] [get_bd_intf_pins v_hdmi_txss1/AUDIO_IN]
@@ -528,12 +660,6 @@ proc create_hier_cell_hdmi_tx_ss { parentCell nameHier } {
   [get_bd_pins v_hdmi_txss1/acr_n]
   connect_bd_net -net audio_ss_0_aud_acr_valid_out  [get_bd_pins acr_valid] \
   [get_bd_pins v_hdmi_txss1/acr_valid]
-  connect_bd_net -net audio_ss_0_aud_rstn  [get_bd_pins s_axis_audio_aresetn] \
-  [get_bd_pins v_hdmi_txss1/s_axis_audio_aresetn]
-  connect_bd_net -net audio_ss_0_audio_clk  [get_bd_pins s_axis_audio_aclk] \
-  [get_bd_pins v_hdmi_txss1/s_axis_audio_aclk]
-  connect_bd_net -net frmbuf_ss_0_field_id  [get_bd_pins fid] \
-  [get_bd_pins v_hdmi_txss1/fid]
   connect_bd_net -net hdmiphy_ss_0_tx_video_clk  [get_bd_pins video_clk] \
   [get_bd_pins v_hdmi_txss1/video_clk]
   connect_bd_net -net ps_ss_clk150_aresetn  [get_bd_pins s_axi_cpu_aresetn] \
@@ -556,6 +682,8 @@ proc create_hier_cell_hdmi_tx_ss { parentCell nameHier } {
   [get_bd_pins irq_tx]
   connect_bd_net -net v_hdmi_txss1_locked  [get_bd_pins v_hdmi_txss1/locked] \
   [get_bd_pins LED0]
+  connect_bd_net -net xlconstant_0_dout  [get_bd_pins xlconstant_0/dout] \
+  [get_bd_pins v_hdmi_txss1/s_axis_audio_aclk]
 
   # Restore current instance
   current_bd_instance $oldCurInst
@@ -620,8 +748,6 @@ proc create_hier_cell_hdmi_rx_ss { parentCell nameHier } {
   create_bd_pin -dir I -type rst s_axi_cpu_aresetn
   create_bd_pin -dir I RX_DET_N_n
   create_bd_pin -dir I -type gt_usrclk link_clk
-  create_bd_pin -dir I -type clk s_axis_audio_aclk
-  create_bd_pin -dir I -type rst s_axis_audio_aresetn
   create_bd_pin -dir O -from 19 -to 0 acr_cts
   create_bd_pin -dir O -from 19 -to 0 acr_n
   create_bd_pin -dir O acr_valid
@@ -629,7 +755,6 @@ proc create_hier_cell_hdmi_rx_ss { parentCell nameHier } {
   create_bd_pin -dir O -type intr irq_rx
   create_bd_pin -dir I -type clk video_clk
   create_bd_pin -dir I -type clk frl_clk
-  create_bd_pin -dir O fid
   create_bd_pin -dir O video_cke_out
   create_bd_pin -dir I -type rst s_axis_video_aresetn
   create_bd_pin -dir I -type clk s_axis_video_aclk
@@ -651,7 +776,7 @@ proc create_hier_cell_hdmi_rx_ss { parentCell nameHier } {
     CONFIG.C_INCLUDE_HDCP {false} \
     CONFIG.C_INCLUDE_HDCP_1_4 {false} \
     CONFIG.C_INCLUDE_HDCP_2_2 {false} \
-    CONFIG.C_INPUT_PIXELS_PER_CLOCK {8} \
+    CONFIG.C_INPUT_PIXELS_PER_CLOCK {4} \
     CONFIG.C_MAX_BITS_PER_COMPONENT {12} \
     CONFIG.C_VALIDATION_ENABLE {false} \
     CONFIG.C_VID_INTERFACE {0} \
@@ -661,6 +786,11 @@ proc create_hier_cell_hdmi_rx_ss { parentCell nameHier } {
 
   # Create instance: rx_video_axis_reg_slice, and set properties
   set rx_video_axis_reg_slice [ create_bd_cell -type ip -vlnv xilinx.com:ip:axis_register_slice rx_video_axis_reg_slice ]
+
+  # Create instance: xlconstant_0, and set properties
+  set xlconstant_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:xlconstant xlconstant_0 ]
+  set_property CONFIG.CONST_VAL {0} $xlconstant_0
+
 
   # Create interface connections
   connect_bd_intf_net -intf_net Conn1 [get_bd_intf_pins rx_video_axis_reg_slice/M_AXIS] [get_bd_intf_pins M_AXIS]
@@ -677,10 +807,6 @@ proc create_hier_cell_hdmi_rx_ss { parentCell nameHier } {
   # Create port connections
   connect_bd_net -net RX_DET_N_IN_1  [get_bd_pins RX_DET_N_n] \
   [get_bd_pins v_hdmi_rxss1/cable_detect]
-  connect_bd_net -net audio_ss_0_aud_rstn  [get_bd_pins s_axis_audio_aresetn] \
-  [get_bd_pins v_hdmi_rxss1/s_axis_audio_aresetn]
-  connect_bd_net -net audio_ss_0_audio_clk  [get_bd_pins s_axis_audio_aclk] \
-  [get_bd_pins v_hdmi_rxss1/s_axis_audio_aclk]
   connect_bd_net -net hdmi_ss_rxoutclk  [get_bd_pins link_clk] \
   [get_bd_pins v_hdmi_rxss1/link_clk]
   connect_bd_net -net hdmiphy_ss_0_rx_video_clk  [get_bd_pins video_clk] \
@@ -703,169 +829,14 @@ proc create_hier_cell_hdmi_rx_ss { parentCell nameHier } {
   [get_bd_pins acr_n]
   connect_bd_net -net v_hdmi_rxss1_acr_valid  [get_bd_pins v_hdmi_rxss1/acr_valid] \
   [get_bd_pins acr_valid]
-  connect_bd_net -net v_hdmi_rxss1_fid  [get_bd_pins v_hdmi_rxss1/fid] \
-  [get_bd_pins fid]
   connect_bd_net -net v_hdmi_rxss1_hpd  [get_bd_pins v_hdmi_rxss1/hpd] \
   [get_bd_pins RX_HPD_OUT]
   connect_bd_net -net v_hdmi_rxss1_irq  [get_bd_pins v_hdmi_rxss1/irq] \
   [get_bd_pins irq_rx]
   connect_bd_net -net v_hdmi_rxss1_video_cke_out  [get_bd_pins v_hdmi_rxss1/video_cke_out] \
   [get_bd_pins video_cke_out]
-
-  # Restore current instance
-  current_bd_instance $oldCurInst
-}
-
-# Hierarchical cell: audio_ss
-proc create_hier_cell_audio_ss { parentCell nameHier } {
-
-  variable script_folder
-
-  if { $parentCell eq "" || $nameHier eq "" } {
-     catch {common::send_gid_msg -ssname BD::TCL -id 2092 -severity "ERROR" "create_hier_cell_audio_ss() - Empty argument(s)!"}
-     return
-  }
-
-  # Get object for parentCell
-  set parentObj [get_bd_cells $parentCell]
-  if { $parentObj == "" } {
-     catch {common::send_gid_msg -ssname BD::TCL -id 2090 -severity "ERROR" "Unable to find parent cell <$parentCell>!"}
-     return
-  }
-
-  # Make sure parentObj is hier blk
-  set parentType [get_property TYPE $parentObj]
-  if { $parentType ne "hier" } {
-     catch {common::send_gid_msg -ssname BD::TCL -id 2091 -severity "ERROR" "Parent <$parentObj> has TYPE = <$parentType>. Expected to be <hier>."}
-     return
-  }
-
-  # Save current instance; Restore later
-  set oldCurInst [current_bd_instance .]
-
-  # Set parent object as current
-  current_bd_instance $parentObj
-
-  # Create cell and set as current instance
-  set hier_obj [create_bd_cell -type hier $nameHier]
-  current_bd_instance $hier_obj
-
-  # Create interface pins
-  create_bd_intf_pin -mode Slave -vlnv xilinx.com:interface:aximm_rtl:1.0 S00_AXI
-
-  create_bd_intf_pin -mode Slave -vlnv xilinx.com:interface:axis_rtl:1.0 axis_audio_in
-
-  create_bd_intf_pin -mode Master -vlnv xilinx.com:interface:axis_rtl:1.0 axis_audio_out
-
-
-  # Create pins
-  create_bd_pin -dir I -type clk ACLK
-  create_bd_pin -dir I -type rst ARESETN
-  create_bd_pin -dir I -type clk tx_tmds_clk
-  create_bd_pin -dir I -type clk rx_tmds_clk
-  create_bd_pin -dir I -type clk tx_link_clk
-  create_bd_pin -dir I -type clk rx_link_clk
-  create_bd_pin -dir I -from 19 -to 0 aud_acr_cts_in
-  create_bd_pin -dir I -from 19 -to 0 aud_acr_n_in
-  create_bd_pin -dir I aud_acr_valid_in
-  create_bd_pin -dir O -from 19 -to 0 aud_acr_cts_out
-  create_bd_pin -dir O -from 19 -to 0 aud_acr_n_out
-  create_bd_pin -dir O aud_acr_valid_out
-  create_bd_pin -dir O -type rst aud_rstn
-  create_bd_pin -dir O -type clk audio_clk
-
-  # Create instance: axi_smartconnect, and set properties
-  set axi_smartconnect [ create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect axi_smartconnect ]
-  set_property -dict [list \
-    CONFIG.NUM_MI {3} \
-    CONFIG.NUM_SI {1} \
-  ] $axi_smartconnect
-
-
-  # Create instance: clkx5_wiz_0, and set properties
-  set clkx5_wiz_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:clkx5_wiz clkx5_wiz_0 ]
-  set_property -dict [list \
-    CONFIG.PRIM_SOURCE {No_buffer} \
-    CONFIG.USE_DYN_RECONFIG {true} \
-  ] $clkx5_wiz_0
-
-
-  # Create instance: aud_pat_gen, and set properties
-  set aud_pat_gen [ create_bd_cell -type ip -vlnv xilinx.com:ip:aud_pat_gen aud_pat_gen ]
-
-  # Create instance: hdmi_acr_ctrl, and set properties
-  set hdmi_acr_ctrl [ create_bd_cell -type ip -vlnv xilinx.com:ip:hdmi_acr_ctrl hdmi_acr_ctrl ]
-  set_property CONFIG.C_HDMI_VERSION {1} $hdmi_acr_ctrl
-
-
-  # Create instance: div_gen, and set properties
-  set div_gen [ create_bd_cell -type ip -vlnv xilinx.com:ip:div_gen div_gen ]
-  set_property -dict [list \
-    CONFIG.ARESETN {true} \
-    CONFIG.algorithm_type {High_Radix} \
-    CONFIG.dividend_and_quotient_width {57} \
-    CONFIG.divisor_width {32} \
-    CONFIG.fractional_width {0} \
-    CONFIG.latency {35} \
-    CONFIG.remainder_type {Fractional} \
-  ] $div_gen
-
-
-  # Create interface connections
-  connect_bd_intf_net -intf_net intf_net_aud_pat_gen_axis_audio_out [get_bd_intf_pins aud_pat_gen/axis_audio_out] [get_bd_intf_pins axis_audio_out]
-  connect_bd_intf_net -intf_net intf_net_axi_smartconnect_M00_AXI [get_bd_intf_pins axi_smartconnect/M00_AXI] [get_bd_intf_pins aud_pat_gen/axi]
-  connect_bd_intf_net -intf_net intf_net_axi_smartconnect_M01_AXI [get_bd_intf_pins axi_smartconnect/M01_AXI] [get_bd_intf_pins hdmi_acr_ctrl/axi]
-  connect_bd_intf_net -intf_net intf_net_axi_smartconnect_M02_AXI [get_bd_intf_pins axi_smartconnect/M02_AXI] [get_bd_intf_pins clkx5_wiz_0/s_axi_lite]
-  connect_bd_intf_net -intf_net intf_net_bdry_in_S00_AXI [get_bd_intf_pins S00_AXI] [get_bd_intf_pins axi_smartconnect/S00_AXI]
-  connect_bd_intf_net -intf_net intf_net_bdry_in_axis_audio_in [get_bd_intf_pins axis_audio_in] [get_bd_intf_pins aud_pat_gen/axis_audio_in]
-  connect_bd_intf_net -intf_net intf_net_div_gen_M_AXIS_DOUT [get_bd_intf_pins div_gen/M_AXIS_DOUT] [get_bd_intf_pins hdmi_acr_ctrl/s_axis_dout]
-  connect_bd_intf_net -intf_net intf_net_hdmi_acr_ctrl_m_axis_dividend [get_bd_intf_pins hdmi_acr_ctrl/m_axis_dividend] [get_bd_intf_pins div_gen/S_AXIS_DIVIDEND]
-  connect_bd_intf_net -intf_net intf_net_hdmi_acr_ctrl_m_axis_divisor [get_bd_intf_pins hdmi_acr_ctrl/m_axis_divisor] [get_bd_intf_pins div_gen/S_AXIS_DIVISOR]
-
-  # Create port connections
-  connect_bd_net -net net_bdry_in_ACLK  [get_bd_pins ACLK] \
-  [get_bd_pins aud_pat_gen/axi_aclk] \
-  [get_bd_pins hdmi_acr_ctrl/axi_aclk] \
-  [get_bd_pins axi_smartconnect/aclk] \
-  [get_bd_pins clkx5_wiz_0/s_axi_aclk] \
-  [get_bd_pins clkx5_wiz_0/clk_in1]
-  connect_bd_net -net net_bdry_in_ARESETN  [get_bd_pins ARESETN] \
-  [get_bd_pins aud_pat_gen/axi_aresetn] \
-  [get_bd_pins hdmi_acr_ctrl/axi_aresetn] \
-  [get_bd_pins axi_smartconnect/aresetn] \
-  [get_bd_pins clkx5_wiz_0/s_axi_aresetn]
-  connect_bd_net -net net_bdry_in_aud_acr_cts_in  [get_bd_pins aud_acr_cts_in] \
-  [get_bd_pins hdmi_acr_ctrl/aud_acr_cts_in]
-  connect_bd_net -net net_bdry_in_aud_acr_n_in  [get_bd_pins aud_acr_n_in] \
-  [get_bd_pins hdmi_acr_ctrl/aud_acr_n_in]
-  connect_bd_net -net net_bdry_in_aud_acr_valid_in  [get_bd_pins aud_acr_valid_in] \
-  [get_bd_pins hdmi_acr_ctrl/aud_acr_valid_in]
-  connect_bd_net -net net_bdry_in_rx_link_clk  [get_bd_pins rx_link_clk] \
-  [get_bd_pins hdmi_acr_ctrl/rx_link_clk]
-  connect_bd_net -net net_bdry_in_rx_tmds_clk  [get_bd_pins rx_tmds_clk] \
-  [get_bd_pins hdmi_acr_ctrl/rx_tmds_clk]
-  connect_bd_net -net net_bdry_in_tx_link_clk  [get_bd_pins tx_link_clk] \
-  [get_bd_pins hdmi_acr_ctrl/tx_link_clk]
-  connect_bd_net -net net_bdry_in_tx_tmds_clk  [get_bd_pins tx_tmds_clk] \
-  [get_bd_pins hdmi_acr_ctrl/tx_tmds_clk]
-  connect_bd_net -net net_clkx5_wiz_0_clk_out1  [get_bd_pins clkx5_wiz_0/clk_out1] \
-  [get_bd_pins audio_clk] \
-  [get_bd_pins aud_pat_gen/aud_clk] \
-  [get_bd_pins aud_pat_gen/axis_clk] \
-  [get_bd_pins hdmi_acr_ctrl/aud_clk] \
-  [get_bd_pins div_gen/aclk]
-  connect_bd_net -net net_clkx5_wiz_0_locked  [get_bd_pins clkx5_wiz_0/locked] \
-  [get_bd_pins hdmi_acr_ctrl/pll_lock_in]
-  connect_bd_net -net net_hdmi_acr_ctrl_aud_acr_cts_out  [get_bd_pins hdmi_acr_ctrl/aud_acr_cts_out] \
-  [get_bd_pins aud_acr_cts_out]
-  connect_bd_net -net net_hdmi_acr_ctrl_aud_acr_n_out  [get_bd_pins hdmi_acr_ctrl/aud_acr_n_out] \
-  [get_bd_pins aud_acr_n_out]
-  connect_bd_net -net net_hdmi_acr_ctrl_aud_acr_valid_out  [get_bd_pins hdmi_acr_ctrl/aud_acr_valid_out] \
-  [get_bd_pins aud_acr_valid_out]
-  connect_bd_net -net net_hdmi_acr_ctrl_aud_resetn  [get_bd_pins hdmi_acr_ctrl/aud_resetn] \
-  [get_bd_pins aud_rstn] \
-  [get_bd_pins aud_pat_gen/axis_resetn] \
-  [get_bd_pins div_gen/aresetn]
+  connect_bd_net -net xlconstant_0_dout  [get_bd_pins xlconstant_0/dout] \
+  [get_bd_pins v_hdmi_rxss1/s_axis_audio_aclk]
 
   # Restore current instance
   current_bd_instance $oldCurInst
@@ -1076,7 +1047,6 @@ proc create_hier_cell_frmbuf_ss_wr { parentCell nameHier } {
 
 
   # Create pins
-  create_bd_pin -dir I -from 0 -to 0 fid_in
   create_bd_pin -dir O -type intr irq_frmbuf_wr
   create_bd_pin -dir I -type clk s_axis_video_aclk
   create_bd_pin -dir I -type rst s_axis_video_aresetn
@@ -1102,22 +1072,9 @@ proc create_hier_cell_frmbuf_ss_wr { parentCell nameHier } {
   set v_frmbuf_wr [ create_bd_cell -type ip -vlnv xilinx.com:ip:v_frmbuf_wr v_frmbuf_wr ]
   set_property -dict [list \
     CONFIG.AXIMM_ADDR_WIDTH {64} \
-    CONFIG.HAS_BGR8 {1} \
-    CONFIG.HAS_BGRX8 {1} \
-    CONFIG.HAS_INTERLACED {1} \
-    CONFIG.HAS_RGB8 {1} \
-    CONFIG.HAS_RGBX10 {1} \
-    CONFIG.HAS_RGBX12 {1} \
-    CONFIG.HAS_RGBX8 {1} \
-    CONFIG.HAS_UYVY8 {1} \
     CONFIG.HAS_Y10 {1} \
     CONFIG.HAS_Y12 {1} \
     CONFIG.HAS_Y8 {1} \
-    CONFIG.HAS_YUV8 {1} \
-    CONFIG.HAS_YUVX10 {1} \
-    CONFIG.HAS_YUVX12 {1} \
-    CONFIG.HAS_YUVX8 {1} \
-    CONFIG.HAS_YUYV8 {1} \
     CONFIG.HAS_Y_UV10 {1} \
     CONFIG.HAS_Y_UV10_420 {1} \
     CONFIG.HAS_Y_UV12 {1} \
@@ -1127,12 +1084,11 @@ proc create_hier_cell_frmbuf_ss_wr { parentCell nameHier } {
     CONFIG.HAS_Y_U_V10 {1} \
     CONFIG.HAS_Y_U_V12 {1} \
     CONFIG.HAS_Y_U_V8 {1} \
-    CONFIG.HAS_Y_U_V8_420 {1} \
-    CONFIG.IS_TILE_FORMAT {0} \
+    CONFIG.IS_TILE_FORMAT {1} \
     CONFIG.MAX_COLS {8192} \
     CONFIG.MAX_DATA_WIDTH {12} \
     CONFIG.MAX_ROWS {4320} \
-    CONFIG.SAMPLES_PER_CLOCK {8} \
+    CONFIG.SAMPLES_PER_CLOCK {4} \
   ] $v_frmbuf_wr
 
 
@@ -1143,7 +1099,7 @@ proc create_hier_cell_frmbuf_ss_wr { parentCell nameHier } {
     CONFIG.C_MAX_COLS {8192} \
     CONFIG.C_MAX_DATA_WIDTH {12} \
     CONFIG.C_MAX_ROWS {4320} \
-    CONFIG.C_SAMPLES_PER_CLK {8} \
+    CONFIG.C_SAMPLES_PER_CLK {4} \
     CONFIG.C_TOPOLOGY {0} \
   ] $v_proc_ss_0
 
@@ -1182,8 +1138,6 @@ proc create_hier_cell_frmbuf_ss_wr { parentCell nameHier } {
   [get_bd_pins v_proc_ss_0/aclk_axis] \
   [get_bd_pins v_proc_ss_0/aclk_ctrl] \
   [get_bd_pins v_frmbuf_wr/ap_clk]
-  connect_bd_net -net fid_in_1  [get_bd_pins fid_in] \
-  [get_bd_pins v_frmbuf_wr/field_id]
   connect_bd_net -net frmbuf_rst_gpio_gpio_io_o  [get_bd_pins frmbuf_rst_gpio/gpio_io_o] \
   [get_bd_pins xlslice_0/Din] \
   [get_bd_pins xlslice_1/Din]
@@ -1469,7 +1423,6 @@ proc create_hier_cell_frmbuff_ss_rd { parentCell nameHier } {
   create_bd_pin -dir O -type intr fb_rd_irq
   create_bd_pin -dir I -type clk s_axis_video_aclk
   create_bd_pin -dir I -type rst s_axis_video_aresetn
-  create_bd_pin -dir O -from 0 -to 0 fid_out
 
   # Create instance: smartconnect, and set properties
   set smartconnect [ create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect smartconnect ]
@@ -1501,22 +1454,9 @@ proc create_hier_cell_frmbuff_ss_rd { parentCell nameHier } {
   set v_frmbuf_rd [ create_bd_cell -type ip -vlnv xilinx.com:ip:v_frmbuf_rd v_frmbuf_rd ]
   set_property -dict [list \
     CONFIG.AXIMM_ADDR_WIDTH {64} \
-    CONFIG.HAS_BGR8 {1} \
-    CONFIG.HAS_BGRX8 {1} \
-    CONFIG.HAS_INTERLACED {1} \
-    CONFIG.HAS_RGB8 {1} \
-    CONFIG.HAS_RGBX10 {1} \
-    CONFIG.HAS_RGBX12 {1} \
-    CONFIG.HAS_RGBX8 {1} \
-    CONFIG.HAS_UYVY8 {1} \
     CONFIG.HAS_Y10 {1} \
     CONFIG.HAS_Y12 {1} \
     CONFIG.HAS_Y8 {1} \
-    CONFIG.HAS_YUV8 {1} \
-    CONFIG.HAS_YUVX10 {1} \
-    CONFIG.HAS_YUVX12 {1} \
-    CONFIG.HAS_YUVX8 {1} \
-    CONFIG.HAS_YUYV8 {1} \
     CONFIG.HAS_Y_UV10 {1} \
     CONFIG.HAS_Y_UV10_420 {1} \
     CONFIG.HAS_Y_UV12 {1} \
@@ -1526,18 +1466,12 @@ proc create_hier_cell_frmbuff_ss_rd { parentCell nameHier } {
     CONFIG.HAS_Y_U_V10 {1} \
     CONFIG.HAS_Y_U_V12 {1} \
     CONFIG.HAS_Y_U_V8 {1} \
-    CONFIG.HAS_Y_U_V8_420 {1} \
-    CONFIG.IS_TILE_FORMAT {0} \
+    CONFIG.IS_TILE_FORMAT {1} \
     CONFIG.MAX_COLS {8192} \
     CONFIG.MAX_DATA_WIDTH {12} \
     CONFIG.MAX_ROWS {4320} \
-    CONFIG.SAMPLES_PER_CLOCK {8} \
+    CONFIG.SAMPLES_PER_CLOCK {4} \
   ] $v_frmbuf_rd
-
-
-  # Create instance: xpm_cdc_gen, and set properties
-  set xpm_cdc_gen [ create_bd_cell -type ip -vlnv xilinx.com:ip:xpm_cdc_gen xpm_cdc_gen ]
-  set_property CONFIG.CDC_TYPE {xpm_cdc_single} $xpm_cdc_gen
 
 
   # Create interface connections
@@ -1553,20 +1487,14 @@ proc create_hier_cell_frmbuff_ss_rd { parentCell nameHier } {
   connect_bd_net -net net_cips_ss_0_clk_out2  [get_bd_pins s_axis_video_aclk] \
   [get_bd_pins fb_rd_rst_gpio/s_axi_aclk] \
   [get_bd_pins smartconnect/aclk] \
-  [get_bd_pins v_frmbuf_rd/ap_clk] \
-  [get_bd_pins xpm_cdc_gen/src_clk] \
-  [get_bd_pins xpm_cdc_gen/dest_clk]
+  [get_bd_pins v_frmbuf_rd/ap_clk]
   connect_bd_net -net net_cips_ss_0_dcm_locked  [get_bd_pins s_axis_video_aresetn] \
   [get_bd_pins fb_rd_rst_gpio/s_axi_aresetn] \
   [get_bd_pins smartconnect/aresetn]
   connect_bd_net -net v_frmbuf_rd_0_interrupt  [get_bd_pins v_frmbuf_rd/interrupt] \
   [get_bd_pins fb_rd_irq]
-  connect_bd_net -net v_frmbuf_rd_field_id  [get_bd_pins v_frmbuf_rd/field_id] \
-  [get_bd_pins xpm_cdc_gen/src_in]
   connect_bd_net -net xlslice_1_Dout  [get_bd_pins xlslice/Dout] \
   [get_bd_pins v_frmbuf_rd/ap_rst_n]
-  connect_bd_net -net xpm_cdc_gen_dest_out  [get_bd_pins xpm_cdc_gen/dest_out] \
-  [get_bd_pins fid_out]
 
   # Restore current instance
   current_bd_instance $oldCurInst
@@ -1658,6 +1586,59 @@ proc create_hier_cell_hdmi_ss { parentCell nameHier } {
   # Create instance: v_fifo_dc, and set properties
   set v_fifo_dc [ create_bd_cell -type ip -vlnv xilinx.com:ip:video_cke_sync v_fifo_dc ]
 
+  # Create instance: axi_iic_0, and set properties
+  set axi_iic_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_iic axi_iic_0 ]
+  set_property CONFIG.IIC_FREQ_KHZ {100} $axi_iic_0
+
+
+  # Create instance: axi_timer_1, and set properties
+  set axi_timer_1 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_timer axi_timer_1 ]
+
+  # Create instance: axi_timer_0, and set properties
+  set axi_timer_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_timer axi_timer_0 ]
+
+  # Create instance: smartconnect, and set properties
+  set smartconnect [ create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect smartconnect ]
+  set_property -dict [list \
+    CONFIG.NUM_CLKS {2} \
+    CONFIG.NUM_MI {9} \
+    CONFIG.NUM_SI {1} \
+  ] $smartconnect
+
+
+  # Create instance: vcc_const, and set properties
+  set vcc_const [ create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconstant vcc_const ]
+  set_property CONFIG.CONST_VAL {1} $vcc_const
+
+
+  # Create instance: axi_noc2, and set properties
+  set axi_noc2 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_noc2 axi_noc2 ]
+  set_property -dict [list \
+    CONFIG.NUM_MI {0} \
+    CONFIG.NUM_NMI {4} \
+    CONFIG.NUM_SI {2} \
+    CONFIG.SI_SIDEBAND_PINS {0} \
+  ] $axi_noc2
+
+
+  set_property -dict [ list \
+   CONFIG.DATA_WIDTH {256} \
+   CONFIG.CONNECTIONS {M02_INI {read_bw {500} write_bw {500} } M00_INI {read_bw {500} write_bw {500} }} \
+   CONFIG.DEST_IDS {} \
+   CONFIG.NOC_PARAMS {} \
+ ] [get_bd_intf_pins $axi_noc2/S00_AXI]
+
+  set_property -dict [ list \
+   CONFIG.DATA_WIDTH {256} \
+   CONFIG.CONNECTIONS {M01_INI {read_bw {500} write_bw {500} } M03_INI {read_bw {500} write_bw {500} }} \
+   CONFIG.DEST_IDS {} \
+   CONFIG.NOC_PARAMS {} \
+ ] [get_bd_intf_pins $axi_noc2/S01_AXI]
+
+  set_property -dict [ list \
+   CONFIG.ASSOCIATED_BUSIF {S00_AXI:S01_AXI} \
+ ] [get_bd_pins $axi_noc2/aclk0]
+
   # Create instance: frmbuff_ss_rd
   create_hier_cell_frmbuff_ss_rd $hier_obj frmbuff_ss_rd
 
@@ -1676,72 +1657,14 @@ proc create_hier_cell_hdmi_ss { parentCell nameHier } {
   # Create instance: vfmc_ctlr_ss
   create_hier_cell_vfmc_ctlr_ss $hier_obj vfmc_ctlr_ss
 
-  # Create instance: audio_ss
-  create_hier_cell_audio_ss $hier_obj audio_ss
-
-  # Create instance: axi_iic_0, and set properties
-  set axi_iic_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_iic axi_iic_0 ]
-  set_property CONFIG.IIC_FREQ_KHZ {100} $axi_iic_0
-
-
-  # Create instance: axi_timer_1, and set properties
-  set axi_timer_1 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_timer axi_timer_1 ]
-
-  # Create instance: axi_timer_0, and set properties
-  set axi_timer_0 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_timer axi_timer_0 ]
-
   # Create instance: hdmi_rx_ss
   create_hier_cell_hdmi_rx_ss $hier_obj hdmi_rx_ss
 
   # Create instance: hdmi_tx_ss
   create_hier_cell_hdmi_tx_ss $hier_obj hdmi_tx_ss
 
-  # Create instance: smartconnect, and set properties
-  set smartconnect [ create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect smartconnect ]
-  set_property -dict [list \
-    CONFIG.NUM_CLKS {2} \
-    CONFIG.NUM_MI {10} \
-    CONFIG.NUM_SI {1} \
-  ] $smartconnect
-
-
-  # Create instance: vcc_const, and set properties
-  set vcc_const [ create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconstant vcc_const ]
-  set_property CONFIG.CONST_VAL {1} $vcc_const
-
-
   # Create instance: hdmiphy_ss
   create_hier_cell_hdmiphy_ss $hier_obj hdmiphy_ss
-
-  # Create instance: axi_noc2, and set properties
-  set axi_noc2 [ create_bd_cell -type ip -vlnv xilinx.com:ip:axi_noc2 axi_noc2 ]
-  set_property -dict [list \
-    CONFIG.NUM_MI {0} \
-    CONFIG.NUM_NMI {4} \
-    CONFIG.NUM_SI {2} \
-    CONFIG.SI_SIDEBAND_PINS {0} \
-  ] $axi_noc2
-
-
-  set_property -dict [ list \
-   CONFIG.DATA_WIDTH {512} \
-   CONFIG.CONNECTIONS {M02_INI {read_bw {500} write_bw {500} } M00_INI {read_bw {500} write_bw {500} }} \
-   CONFIG.DEST_IDS {} \
-   CONFIG.NOC_PARAMS {} \
-   CONFIG.CATEGORY {pl} \
- ] [get_bd_intf_pins $axi_noc2/S00_AXI]
-
-  set_property -dict [ list \
-   CONFIG.DATA_WIDTH {512} \
-   CONFIG.CONNECTIONS {M01_INI {read_bw {500} write_bw {500} } M03_INI {read_bw {500} write_bw {500} }} \
-   CONFIG.DEST_IDS {} \
-   CONFIG.NOC_PARAMS {} \
-   CONFIG.CATEGORY {pl} \
- ] [get_bd_intf_pins $axi_noc2/S01_AXI]
-
-  set_property -dict [ list \
-   CONFIG.ASSOCIATED_BUSIF {S00_AXI:S01_AXI} \
- ] [get_bd_pins $axi_noc2/aclk0]
 
   # Create interface connections
   connect_bd_intf_net -intf_net Conn1 [get_bd_intf_pins axi_iic_0/IIC] [get_bd_intf_pins HDMI_CTRL]
@@ -1751,7 +1674,6 @@ proc create_hier_cell_hdmi_ss { parentCell nameHier } {
   connect_bd_intf_net -intf_net SB_STATUS_IN_1 [get_bd_intf_pins hdmi_tx_ss/SB_STATUS_IN] [get_bd_intf_pins hdmiphy_ss/vid_phy_status_sb_tx]
   connect_bd_intf_net -intf_net S_AXI_1 [get_bd_intf_pins vfmc_ctlr_ss/S_AXI] [get_bd_intf_pins smartconnect/M06_AXI]
   connect_bd_intf_net -intf_net TX_REFCLK_P_IN_V_1 [get_bd_intf_pins TX_REFCLK_P_IN_V] [get_bd_intf_pins gt_refclk_buf_ss_1/IBUFDSGT_IN]
-  connect_bd_intf_net -intf_net audio_ss_0_axis_audio_out [get_bd_intf_pins audio_ss/axis_audio_out] [get_bd_intf_pins hdmi_tx_ss/AUDIO_IN]
   connect_bd_intf_net -intf_net axi_noc2_M00_INI [get_bd_intf_pins M00_INI] [get_bd_intf_pins axi_noc2/M00_INI]
   connect_bd_intf_net -intf_net axi_noc2_M01_INI [get_bd_intf_pins M01_INI] [get_bd_intf_pins axi_noc2/M01_INI]
   connect_bd_intf_net -intf_net axi_noc2_M02_INI [get_bd_intf_pins M02_INI] [get_bd_intf_pins axi_noc2/M02_INI]
@@ -1768,7 +1690,6 @@ proc create_hier_cell_hdmi_ss { parentCell nameHier } {
   connect_bd_intf_net -intf_net hdmiphy_ss_1_vid_phy_rx_axi4s_ch2 [get_bd_intf_pins hdmiphy_ss/vid_phy_rx_axi4s_ch2] [get_bd_intf_pins hdmi_rx_ss/LINK_DATA2_IN]
   connect_bd_intf_net -intf_net hdmiphy_ss_1_vid_phy_rx_axi4s_ch3 [get_bd_intf_pins hdmiphy_ss/vid_phy_rx_axi4s_ch3] [get_bd_intf_pins hdmi_rx_ss/LINK_DATA3_IN]
   connect_bd_intf_net -intf_net hdmiphy_ss_1_vid_phy_status_sb_rx [get_bd_intf_pins hdmiphy_ss/vid_phy_status_sb_rx] [get_bd_intf_pins hdmi_rx_ss/SB_STATUS_IN]
-  connect_bd_intf_net -intf_net s_axi_CTRL_1 [get_bd_intf_pins frmbuf_ss_wr/s_axi_CTRL] [get_bd_intf_pins smartconnect/M08_AXI]
   connect_bd_intf_net -intf_net s_axis_video_1 [get_bd_intf_pins frmbuf_ss_wr/s_axis_video] [get_bd_intf_pins hdmi_rx_ss/M_AXIS]
   connect_bd_intf_net -intf_net smartconnect_0_M00_AXI [get_bd_intf_pins smartconnect/M00_AXI] [get_bd_intf_pins hdmiphy_ss/vid_phy_axi4lite]
   connect_bd_intf_net -intf_net smartconnect_0_M01_AXI [get_bd_intf_pins smartconnect/M01_AXI] [get_bd_intf_pins hdmi_rx_ss/S_AXI_CPU_IN]
@@ -1776,9 +1697,8 @@ proc create_hier_cell_hdmi_ss { parentCell nameHier } {
   connect_bd_intf_net -intf_net smartconnect_0_M03_AXI [get_bd_intf_pins axi_iic_0/S_AXI] [get_bd_intf_pins smartconnect/M03_AXI]
   connect_bd_intf_net -intf_net smartconnect_0_M04_AXI [get_bd_intf_pins axi_timer_0/S_AXI] [get_bd_intf_pins smartconnect/M04_AXI]
   connect_bd_intf_net -intf_net smartconnect_0_M05_AXI [get_bd_intf_pins axi_timer_1/S_AXI] [get_bd_intf_pins smartconnect/M05_AXI]
-  connect_bd_intf_net -intf_net smartconnect_0_M07_AXI [get_bd_intf_pins smartconnect/M07_AXI] [get_bd_intf_pins audio_ss/S00_AXI]
-  connect_bd_intf_net -intf_net smartconnect_0_M09_AXI [get_bd_intf_pins smartconnect/M09_AXI] [get_bd_intf_pins frmbuff_ss_rd/s_axi_ctrl_vmix]
-  connect_bd_intf_net -intf_net v_hdmi_rxss1_AUDIO_OUT [get_bd_intf_pins hdmi_rx_ss/AUDIO_OUT] [get_bd_intf_pins audio_ss/axis_audio_in]
+  connect_bd_intf_net -intf_net smartconnect_M07_AXI [get_bd_intf_pins smartconnect/M07_AXI] [get_bd_intf_pins frmbuf_ss_wr/s_axi_CTRL]
+  connect_bd_intf_net -intf_net smartconnect_M08_AXI [get_bd_intf_pins smartconnect/M08_AXI] [get_bd_intf_pins frmbuff_ss_rd/s_axi_ctrl_vmix]
   connect_bd_intf_net -intf_net v_hdmi_rxss1_DDC_OUT [get_bd_intf_pins RX_DDC_OUT] [get_bd_intf_pins hdmi_rx_ss/DDC_OUT]
   connect_bd_intf_net -intf_net v_hdmi_txss1_DDC_OUT [get_bd_intf_pins TX_DDC_OUT] [get_bd_intf_pins hdmi_tx_ss/DDC_OUT]
   connect_bd_intf_net -intf_net vmixer_m_axis_vmix_video_out [get_bd_intf_pins frmbuff_ss_rd/m_axis_video_out] [get_bd_intf_pins hdmi_tx_ss/S_AXIS]
@@ -1790,32 +1710,17 @@ proc create_hier_cell_hdmi_ss { parentCell nameHier } {
   [get_bd_pins hdmi_rx_ss/RX_DET_N_n]
   connect_bd_net -net TX_HPD_IN_1  [get_bd_pins TX_HPD_IN] \
   [get_bd_pins hdmi_tx_ss/TX_HPD_IN]
-  connect_bd_net -net audio_ss_0_aud_acr_cts_out  [get_bd_pins audio_ss/aud_acr_cts_out] \
-  [get_bd_pins hdmi_tx_ss/acr_cts]
-  connect_bd_net -net audio_ss_0_aud_acr_n_out  [get_bd_pins audio_ss/aud_acr_n_out] \
-  [get_bd_pins hdmi_tx_ss/acr_n]
-  connect_bd_net -net audio_ss_0_aud_acr_valid_out  [get_bd_pins audio_ss/aud_acr_valid_out] \
-  [get_bd_pins hdmi_tx_ss/acr_valid]
-  connect_bd_net -net audio_ss_0_aud_rstn  [get_bd_pins audio_ss/aud_rstn] \
-  [get_bd_pins hdmi_rx_ss/s_axis_audio_aresetn] \
-  [get_bd_pins hdmi_tx_ss/s_axis_audio_aresetn]
-  connect_bd_net -net audio_ss_0_audio_clk  [get_bd_pins audio_ss/audio_clk] \
-  [get_bd_pins hdmi_rx_ss/s_axis_audio_aclk] \
-  [get_bd_pins hdmi_tx_ss/s_axis_audio_aclk]
   connect_bd_net -net axi_iic_0_iic2intc_irpt  [get_bd_pins axi_iic_0/iic2intc_irpt] \
   [get_bd_pins irq_iic_ctrl]
   connect_bd_net -net axi_timer_0_interrupt  [get_bd_pins axi_timer_0/interrupt] \
   [get_bd_pins irq_timer0]
   connect_bd_net -net axi_timer_1_interrupt  [get_bd_pins axi_timer_1/interrupt] \
   [get_bd_pins irq_timer1]
-  connect_bd_net -net fid_1  [get_bd_pins frmbuff_ss_rd/fid_out] \
-  [get_bd_pins hdmi_tx_ss/fid]
   connect_bd_net -net gt_refclk_buf_ss_0_IBUFDSGT_ODIV2_OUT  [get_bd_pins gt_refclk_buf_ss_0/IBUFDSGT_ODIV2_OUT] \
   [get_bd_pins hdmiphy_ss/dru_ref_clk_odiv2_in]
   connect_bd_net -net gt_refclk_buf_ss_0_IBUFDSGT_OUT  [get_bd_pins gt_refclk_buf_ss_0/IBUFDSGT_OUT] \
   [get_bd_pins hdmiphy_ss/dru_ref_clk_in]
   connect_bd_net -net hdmi_ss_rxoutclk  [get_bd_pins hdmiphy_ss/rxoutclk] \
-  [get_bd_pins audio_ss/rx_link_clk] \
   [get_bd_pins hdmi_rx_ss/link_clk]
   connect_bd_net -net hdmiphy_ss_0_rx_video_clk  [get_bd_pins hdmiphy_ss/rx_video_clk] \
   [get_bd_pins v_fifo_dc/a_clk] \
@@ -1825,8 +1730,6 @@ proc create_hier_cell_hdmi_ss { parentCell nameHier } {
   [get_bd_pins hdmi_tx_ss/video_clk]
   connect_bd_net -net hdmiphy_ss_1_irq  [get_bd_pins hdmiphy_ss/irq] \
   [get_bd_pins irq_vphy]
-  connect_bd_net -net hdmiphy_ss_1_rx_tmds_clk  [get_bd_pins hdmiphy_ss/rx_tmds_clk] \
-  [get_bd_pins audio_ss/rx_tmds_clk]
   connect_bd_net -net hdmiphy_ss_1_rx_tmds_clk_n  [get_bd_pins hdmiphy_ss/rx_tmds_clk_n] \
   [get_bd_pins RX_REFCLK_N_OUT]
   connect_bd_net -net hdmiphy_ss_1_rx_tmds_clk_p  [get_bd_pins hdmiphy_ss/rx_tmds_clk_p] \
@@ -1834,7 +1737,6 @@ proc create_hier_cell_hdmi_ss { parentCell nameHier } {
   connect_bd_net -net pl_lpd_irq6_1  [get_bd_pins frmbuf_ss_wr/irq_frmbuf_wr] \
   [get_bd_pins fb_wr_irq]
   connect_bd_net -net ps_ss_clk150_aresetn  [get_bd_pins s_axi_cpu_aresetn] \
-  [get_bd_pins audio_ss/ARESETN] \
   [get_bd_pins vfmc_ctlr_ss/s_axi_aresetn] \
   [get_bd_pins axi_timer_0/s_axi_aresetn] \
   [get_bd_pins axi_timer_1/s_axi_aresetn] \
@@ -1854,7 +1756,6 @@ proc create_hier_cell_hdmi_ss { parentCell nameHier } {
   [get_bd_pins hdmi_rx_ss/frl_clk] \
   [get_bd_pins hdmi_tx_ss/frl_clk]
   connect_bd_net -net ps_ss_pl_clk_150  [get_bd_pins s_axi_cpu_aclk] \
-  [get_bd_pins audio_ss/ACLK] \
   [get_bd_pins vfmc_ctlr_ss/s_axi_aclk] \
   [get_bd_pins axi_timer_0/s_axi_aclk] \
   [get_bd_pins axi_timer_1/s_axi_aclk] \
@@ -1878,24 +1779,13 @@ proc create_hier_cell_hdmi_ss { parentCell nameHier } {
   connect_bd_net -net rx_ref_clk_odiv2_in_1  [get_bd_pins gt_refclk_buf_ss_2/IBUFDSGT_ODIV2_OUT] \
   [get_bd_pins hdmiphy_ss/rx_ref_clk_odiv2_in]
   connect_bd_net -net tx_link_clk_1  [get_bd_pins hdmiphy_ss/txoutclk] \
-  [get_bd_pins audio_ss/tx_link_clk] \
   [get_bd_pins hdmi_tx_ss/link_clk]
   connect_bd_net -net tx_ref_clk_in_1  [get_bd_pins gt_refclk_buf_ss_1/IBUFDSGT_OUT] \
   [get_bd_pins hdmiphy_ss/tx_ref_clk_in]
   connect_bd_net -net tx_ref_clk_odiv2_in_1  [get_bd_pins gt_refclk_buf_ss_1/IBUFDSGT_ODIV2_OUT] \
   [get_bd_pins hdmiphy_ss/tx_ref_clk_odiv2_in]
-  connect_bd_net -net tx_tmds_clk_1  [get_bd_pins hdmiphy_ss/tx_tmds_clk] \
-  [get_bd_pins audio_ss/tx_tmds_clk]
   connect_bd_net -net v_fifo_dc_b_de_out  [get_bd_pins v_fifo_dc/b_de_out] \
   [get_bd_pins hdmi_tx_ss/video_cke_in]
-  connect_bd_net -net v_hdmi_rxss1_acr_cts  [get_bd_pins hdmi_rx_ss/acr_cts] \
-  [get_bd_pins audio_ss/aud_acr_cts_in]
-  connect_bd_net -net v_hdmi_rxss1_acr_n  [get_bd_pins hdmi_rx_ss/acr_n] \
-  [get_bd_pins audio_ss/aud_acr_n_in]
-  connect_bd_net -net v_hdmi_rxss1_acr_valid  [get_bd_pins hdmi_rx_ss/acr_valid] \
-  [get_bd_pins audio_ss/aud_acr_valid_in]
-  connect_bd_net -net v_hdmi_rxss1_fid  [get_bd_pins hdmi_rx_ss/fid] \
-  [get_bd_pins frmbuf_ss_wr/fid_in]
   connect_bd_net -net v_hdmi_rxss1_hpd  [get_bd_pins hdmi_rx_ss/RX_HPD_OUT] \
   [get_bd_pins RX_HPD_OUT]
   connect_bd_net -net v_hdmi_rxss1_irq  [get_bd_pins hdmi_rx_ss/irq_rx] \
@@ -1932,7 +1822,6 @@ proc available_tcl_procs { } {
    puts "#    create_hier_cell_gt_refclk_buf_ss_2 parentCell nameHier"
    puts "#    create_hier_cell_frmbuf_ss_wr parentCell nameHier"
    puts "#    create_hier_cell_vfmc_ctlr_ss parentCell nameHier"
-   puts "#    create_hier_cell_audio_ss parentCell nameHier"
    puts "#    create_hier_cell_hdmi_rx_ss parentCell nameHier"
    puts "#    create_hier_cell_hdmi_tx_ss parentCell nameHier"
    puts "#    create_hier_cell_hdmiphy_ss parentCell nameHier"
