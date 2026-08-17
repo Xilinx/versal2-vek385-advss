@@ -7,8 +7,8 @@
 ## HDMI ADVSS Hardware Design
 
 The HDMI ADVSS hardware design targets:
-- **HDMI-2.1 Rx → VPSS → FBWR → DDR → FBRD → HDMI-2.1 Tx passthrough pipeline** at **8Kp30 @ 8bpp**
-- **HDMI-2.1 RX → VPSS → FBWR → DDR → VCU2 Encode → DDR → VCU2 Decode → DDR → FBRD → HDMI-2.1 TX pipeline** at **4Kp60 @ 8bpp**
+- **HDMI-2.1 Rx → VPSS → FBWR → DDR → FBRD → HDMI-2.1 Tx passthrough pipeline** at **8Kp30 **
+- **HDMI-2.1 RX → VPSS → FBWR → DDR → VCU2 Encode → DDR → VCU2 Decode → DDR → FBRD → HDMI-2.1 TX pipeline** at **4Kp60 **
 
 The hardware design is targeted for the **VEK385 Rev-B1 & B2 board**.
 
