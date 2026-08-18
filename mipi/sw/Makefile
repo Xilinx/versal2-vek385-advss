@@ -17,17 +17,17 @@ BUILD_BASE := $(WORK_DIR)
 # Yocto repository configuration (clones to current path)
 REPO_URL := https://storage.googleapis.com/git-repo-downloads/repo
 REPO_MANIFEST_URL := https://github.com/Xilinx/yocto-manifests.git
-REPO_BRANCH := refs/tags/amd-edf-rel-v25.11
+REPO_BRANCH := refs/tags/amd-edf-rel-v26.06
 REPO_MANIFEST_FILE := default-edf.xml
-YOCTO_DIR := $(BUILD_BASE)/yocto-edf-25.11
+YOCTO_DIR := $(BUILD_BASE)/yocto-edf-26.1
 
 # Build target configuration
-MACHINE := versal-2ve-2vm-vek385-revb-sdt-seg
+MACHINE := versal-2ve-2vm-vek385-revb-multidomain
 SDT_DIR := $(BUILD_BASE)/../hw/mipi_sdt
 IMAGE_OSPI := edf-ospi
 IMAGE_ROOTFS := edf-linux-disk-image
 
-VEK385_TEMPLATE := ../sources/meta-amd-adaptive-socs/meta-amd-adaptive-socs-bsp/conf/machineyaml/versal-2ve-2vm-vek385-revb-sdt-seg.yaml
+VEK385_TEMPLATE := ../sources/meta-amd-adaptive-socs/meta-amd-adaptive-socs-bsp/conf/machineyaml/versal-2ve-2vm-vek385-revb-multidomain.yaml
 
 # Detect if current path is on NFS filesystem
 # Checks for 'nfs' or 'nfs4' filesystem type
@@ -126,7 +126,7 @@ sync: setup
 		echo "Repo already initialized in $(YOCTO_DIR)"; \
 	fi
 	@if [ ! -d $(YOCTO_DIR)/sources ]; then \
-		echo "Syncing repositories (this may take 10-30 minutes on first run)..."; \
+		echo "Syncing repositories (this may take 5-10 minutes on first run)..."; \
 		cd $(YOCTO_DIR) && $(BUILD_BASE)/repo sync -j$(PARALLEL_MAKE) || { \
 			printf "%b\n" "$(COLOR_YELLOW)Error: repo sync failed$(COLOR_RESET)"; \
 			echo "Try running: cd $(YOCTO_DIR) && $(BUILD_BASE)/repo sync"; \
@@ -151,6 +151,9 @@ configure: sync
 		echo "Sourcing edf-init-build-env and configuring local.conf..."; \
 		cd $(YOCTO_DIR); \
 		source edf-init-build-env; \
+		cp -rf ../../meta-custom-bsp ../sources/.;\
+	        bitbake-layers add-layer ../sources/meta-custom-bsp;\
+		echo "meta-custom-bsp layer added successfully"; \
 		if [ '$(IS_NFS)' = 'yes' ]; then \
 			if ! grep -q '^TMPDIR = ' conf/local.conf 2>/dev/null; then \
 				echo 'TMPDIR = "$(YOCTO_TMP_DIR)"' >> conf/local.conf; \
@@ -292,12 +295,12 @@ artifacts: build-ospi build-rootfs
 	else \
 		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) RootFS NOT FOUND"; \
 	fi; \
-	PL_DTSI="$(YOCTO_DIR)/build/conf/dts/$(MACHINE)/pl-overlay-full/pl.dtsi"; \
-	if [ -f "$$PL_DTSI" ]; then \
-		cp "$$PL_DTSI" $(BUILD_BASE)/artifacts/pl.dtsi; \
-		printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied pl.dtsi"; \
+	PL_DTSO="$(YOCTO_DIR)/build/conf/dts/$(MACHINE)/pl-overlay-full/pl.dtso"; \
+	if [ -f "$$PL_DTSO" ]; then \
+		cp "$$PL_DTSO" $(BUILD_BASE)/artifacts/pl.dtso; \
+		printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied pl.dtso"; \
 	else \
-		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) pl.dtsi not found: $(YOCTO_DIR)/build/conf/dts/$(MACHINE)/pl-overlay-full/pl.dtsi"; \
+		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) pl.dtso not found: $(YOCTO_DIR)/build/conf/dts/$(MACHINE)/pl-overlay-full/pl.dtso"; \
 	fi
 	@echo ""
 	@ls -lh $(BUILD_BASE)/artifacts/ 2>/dev/null
@@ -323,7 +326,7 @@ build: artifacts
 	@echo "Key files copied:"
 	@echo "  - ospi.bin (OSPI boot image)"
 	@echo "  - edf-linux.wic.xz (rootfs)"
-	@echo "  - pl.dtsi (device tree overlay)"
+	@echo "  - pl.dtso (device tree overlay)"
 	@echo ""
 
 #===============================================================================

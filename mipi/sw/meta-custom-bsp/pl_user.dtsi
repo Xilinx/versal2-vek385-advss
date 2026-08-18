@@ -1,0 +1,13 @@
+/*------------------------------------------------* 
+# # Copyright (c) 2026 Advanced Micro Devices, Inc.
+# # SPDX-License-Identifier: MIT
+# # -----------------------------------------------*/
+
+&amba_pl {
+	/delete-node/ i2c@80010000;
+	/delete-node/ mipi_csi2_rx_subsystem@b0020000;
+	/delete-node/ mipi_csi2_rx_subsystem@b0022000;
+	/delete-node/ mipi_csi2_rx_subsystem@b0024000;
+	/delete-node/ mipi_csi2_rx_subsystem@b0026000;
+	
+};

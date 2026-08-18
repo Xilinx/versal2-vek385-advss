@@ -10,11 +10,11 @@ The MIPI ADVSS supports below pipelines
 
 - **MIPI-4x Capture + ISP-MCM +Mixer+HDMI-2.1 Tx@4kp60**
 
-The hardware design is targeted for the **VEK385 Rev-B1  board**.
+The hardware design is targeted for the **VEK385 Rev-B1 and B2 board**.
 
 ### Tools Version
 
-- **Vivado™ 2025.2**
+- **Vivado™ 2026.1**
 
 ### Build Instructions
 
