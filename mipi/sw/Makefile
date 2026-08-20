@@ -67,8 +67,43 @@ COLOR_CYAN := \033[36m
 # Phony Targets
 #===============================================================================
 
-.PHONY: all setup sync configure gen-machine build-ospi build-rootfs build images \
+.PHONY: help all setup sync configure gen-machine build-ospi build-rootfs build artifacts \
         clean-machineconf clean
+
+
+help:
+	@echo "Usage:"
+	@echo ""
+	@echo "  make help"
+	@echo "    Show this help message"
+	@echo ""
+	@echo "  make all"
+	@echo "    Build OSPI and RootFS images"
+	@echo ""
+	@echo "  make setup"
+	@echo "    Download repo tool and prepare the build environment"
+	@echo ""
+	@echo "  make sync"
+	@echo "    Initialize and sync Yocto repositories"
+	@echo ""
+	@echo "  make configure"
+	@echo "    Configure Yocto build environment"
+	@echo ""
+	@echo "  make gen-machine"
+	@echo "    Generate machine configuration from SDT"
+	@echo ""
+	@echo "  make build-ospi"
+	@echo "    Build OSPI boot image"
+	@echo ""
+	@echo "  make build-rootfs"
+	@echo "    Build Linux kernel and root filesystem"
+	@echo ""
+	@echo "  make artifacts"
+	@echo "    Copy generated images to local artifacts directory"
+	@echo ""
+	@echo "  make clean"
+	@echo "    Clean build outputs"
+	``
 
 #===============================================================================
 # Default Target
@@ -207,12 +242,12 @@ gen-machine: configure
 		echo "Parsing hardware description and generating device tree..."; \
 		cd $(YOCTO_DIR); \
 		source edf-init-build-env; \
-		gen-machineconf parse-sdt --template $(VEK385_TEMPLATE) --hw-description $(SDT_DIR) || { \
+		gen-machineconf parse-sdt --template $(VEK385_TEMPLATE) --hw-description $(SDT_DIR) --add-config CONFIG_SUBSYSTEM_PL_INPUT_DTSI=\"$(YOCTO_DIR)/sources/meta-custom-bsp/pl_user.dtsi\" || { \
 			printf "%b\n" "$(COLOR_YELLOW)Error: Failed to generate machine configuration$(COLOR_RESET)"; \
 			exit 1; \
 		}; \
 		echo ""; \
-		echo "Generated machine file as $(YOCTO_DIR)/build/conf/machine/versal-2ve-2vm-vek385-revb-sdt-seg.conf"; \
+		echo "Generated machine file as $(YOCTO_DIR)/build/conf/machine/versal-2ve-2vm-vek385-revb-multidomain.conf"; \
 		ls -lh $(YOCTO_DIR)/build/output 2>/dev/null || echo "  (directory listing unavailable)"; \
 		echo ""; \
 		printf "%b\n" "$(COLOR_GREEN)Machine configuration generated: $(MACHINE)$(COLOR_RESET)"; \
