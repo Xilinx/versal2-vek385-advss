@@ -36,7 +36,7 @@ IS_NFS := $(shell df -T $(WORK_DIR) 2>/dev/null | awk 'NR==2 {print $$2}' | grep
 # Set YOCTO_TMP_DIR based on NFS detection
 # NFS builds should use /scratch
 ifeq ($(IS_NFS),yes)
-    YOCTO_TMP_DIR := /scratch/$(USER)/yocto_tmp
+    YOCTO_TMP_DIR := /scratch/$(USER)/10g_yocto_tmp
     $(info *** NFS filesystem detected ***)
     $(info *** Using /scratch for TMP_DIR: $(YOCTO_TMP_DIR) ***)
 else

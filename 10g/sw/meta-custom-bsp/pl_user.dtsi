@@ -7,7 +7,7 @@
 	/delete-node/ i2c@80010000;
 	/delete-node/ mipi_csi2_rx_subsystem@b0020000;
 	/delete-node/ mipi_csi2_rx_subsystem@b0022000;
-	/delete-node/ mipi_csi2_rx_subsystem@b0024000
+	/delete-node/ mipi_csi2_rx_subsystem@b0024000;
 	/delete-node/ mipi_csi2_rx_subsystem@b0026000;
 	/delete-node/ visp_mbox_rpu_8;
 	
