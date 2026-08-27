@@ -77,7 +77,7 @@ all: runs/MMI_10G/MMI_10G.xsa
 .PHONY: runs/MMI_10G/MMI_10G.xsa
 runs/MMI_10G/MMI_10G.xsa:
 	@if [ -d runs ]; then echo "Removing existing runs/ ..."; $(RM) runs; fi
-	${VIVADO} -mode batch -s ./main.tcl -tclargs -jobs $(JOBS)
+	${VIVADO} -mode batch -s ./scripts/main.tcl -tclargs -jobs $(JOBS)
 
 .PHONY: clean
 clean:

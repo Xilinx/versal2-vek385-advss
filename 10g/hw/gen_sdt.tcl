@@ -12,7 +12,7 @@ for { set i 0 } { $i < $argc } { incr i } {
 }
 
 sdtgen set_dt_param -debug enable
-sdtgen set_dt_param -dir ./mmi_10g_sdt
+sdtgen set_dt_param -dir ./MMI_10g_sdt
 sdtgen set_dt_param -xsa $xsa_path
 sdtgen set_dt_param -board_dts versal2-vek385-revb
 sdtgen generate_sdt
