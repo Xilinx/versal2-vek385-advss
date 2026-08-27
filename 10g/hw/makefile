@@ -1,53 +1,84 @@
-# Copyright (c) 2026 Advanced Micro Devices, Inc.
-# SPDX-License-Identifier: MIT
-# -----------------------------------------------
-SHELL := /bin/bash
+###################################################################
+###  Copyright (C) 2025 - 2026 Advanced Micro Devices,Inc. 
+# ------------------------------------------------------------------------------
+#  # #   Copyright (c)  2018-2022 Xilinx, Inc. All rights reserved.
+# #   This file contains confidential and proprietary information
+# # #   of Xilinx, Inc. and is protected under U.S. and
+# # #   international copyright and other intellectual property
+# # #   laws.
+# # #
+# # #   DISCLAIMER
+# # #   This disclaimer is not a license and does not grant any
+# # #   rights to the materials distributed herewith. Except as
+# # #   otherwise provided in a valid license issued to you by
+# # #   Xilinx, and to the maximum extent permitted by applicable
+# # #   law: (1) THESE MATERIALS ARE MADE AVAILABLE \"AS IS\" AND
+# # #   WITH ALL FAULTS, AND AMD HEREBY DISCLAIMS ALL WARRANTIES
+# # #   AND CONDITIONS, EXPRESS, IMPLIED, OR STATUTORY, INCLUDING
+# # #   BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, NON-
+# # #   INFRINGEMENT, OR FITNESS FOR ANY PARTICULAR PURPOSE; and
+# # #   (2) Xilinx shall not be liable (whether in contract or tort,
+# # #   including negligence, or under any other theory of
+# # #   liability) for any loss or damage of any kind or nature
+# # #   related to, arising under or in connection with these
+# # #   materials, including for any direct, or any indirect,
+# # #   special, incidental, or consequential loss or damage
+# # #   (including loss of data, profits, goodwill, or any type of
+# # #   loss or damage suffered as a result of any action brought
+# # #   by a third party) even if such damage or loss was
+# # #   reasonably foreseeable or Xilinx had been advised of the
+# # #   possibility of the same.
+# # #
+# # #   CRITICAL APPLICATIONS
+# # #   Xilinx products are not designed or intended to be fail-
+# # #   safe, or for use in any application requiring fail-safe
+# # #   performance, such as life-support or safety devices or
+# # #   systems, Class III medical devices, nuclear facilities,
+# # #   applications related to the deployment of airbags, or any
+# # #   other applications that could lead to death, personal
+# # #   injury, or severe property or environmental damage
+# # #   (individually and collectively, \"Critical
+# # #   Applications\"). Customer assumes the sole risk and
+# # #   liability of any use of Xilinx products in Critical
+# # #   Applications, subject only to applicable laws and
+# # #   regulations governing limitations on product liability.
+# # #
+# # #   THIS COPYRIGHT NOTICE AND DISCLAIMER MUST BE RETAINED AS
+# # #   PART OF THIS FILE AT ALL TIMES.
+# # # ------------------------------------------------------------------------------
+#
+
+
 
 RM = rm -rf
-PWD = $(shell readlink -f .)
-
 VIVADO = $(XILINX_VIVADO)/bin/vivado
-SDTGEN = $(XILINX_VIVADO)/bin/sdtgen
-JOBS ?= 8
-VIV_PRJ_DIR = $(PWD)/runs/MMI_10g
-VIV_SCRIPTS_DIR = scripts
 
-VIV_TIMING_ERROR = "CRITICAL WARNING: \[Timing 38-282\] The design failed to meet the timing requirements"
+NPROC := $(shell nproc)
+JOBS := $(shell echo $$(( $(NPROC) - 2 )))
 
-VIV_DESIGN = MMI_10g
-VIV_XSA = $(VIV_PRJ_DIR)/$(VIV_DESIGN).xsa
-VIV_SRC = $(VIV_SCRIPTS_DIR)/main.tcl
+DESIGN ?= MMI_10g
 
-SDT_SRC = $(PWD)/gen_sdt.tcl
+# valid designs
+DESIGN_LIST = MMI_10g
+
 
 .PHONY: help
 help:
 	@echo 'Usage:'
 	@echo ''
-	@echo '  make xsa [JOBS=<n>]'
-	@echo '    Generate xsa '
-	@echo ''
-	@echo '  make sdt'
-	@echo '    Generate sdt files'
-	@echo ''
-	@echo '  make all [JOBS=<n>]'
-	@echo '    Generate xsa and sdt files'
-	@echo ''
-	@echo '  Options:'
-	@echo '    JOBS: optional param to set number of synthesis jobs (default: 8)'
+	@echo '  make all DESIGN=<design> '
+	@echo '    Generate xsa for platform generation'
+	@echo '    Valid options for DESIGN: ${DESIGN_LIST}'
 	@echo ''
 
 .PHONY: all
-all: xsa sdt
+all: runs/MMI_10G/MMI_10G.xsa
 
-xsa: $(VIV_XSA)
-$(VIV_XSA): $(VIV_SRC)
-	$(VIVADO) -mode batch -notrace -source $(VIV_SRC) -tclargs -jobs $(JOBS)
-	@grep $(VIV_TIMING_ERROR) vivado.log; if [ $$? = 0 ]; then exit 1; fi
-
-sdt: $(SDT_SRC) $(VIV_XSA)
-	$(SDTGEN) $(SDT_SRC) -xsa_path $(VIV_XSA)
+.PHONY: runs/MMI_10G/MMI_10G.xsa
+runs/MMI_10G/MMI_10G.xsa:
+	@if [ -d runs ]; then echo "Removing existing runs/ ..."; $(RM) runs; fi
+	${VIVADO} -mode batch -s ./main.tcl -tclargs -jobs $(JOBS)
 
 .PHONY: clean
 clean:
-	$(RM) $(VIV_PRJ_DIR) vivado* .Xil *dynamic* *.log *.xpe .crashReporter hd_visual *.swp
+	$(RM) runs vivado*.log vivado*.jou *.str README.hw address_map.json
