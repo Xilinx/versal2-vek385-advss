@@ -26,7 +26,11 @@ help:
 	@echo ''
 
 .PHONY: all
-all: runs/MMI_10G/MMI_10G.xsa
+all: sdt
+
+.PHONY: sdt
+sdt: runs/MMI_10G/MMI_10G.xsa
+	${VIVADO} -mode batch -s ./gen_sdt.tcl -tclargs -xsa_path runs/MMI_10G/MMI_10G.xsa
 
 .PHONY: runs/MMI_10G/MMI_10G.xsa
 runs/MMI_10G/MMI_10G.xsa:
@@ -35,4 +39,4 @@ runs/MMI_10G/MMI_10G.xsa:
 
 .PHONY: clean
 clean:
-	$(RM) runs vivado*.log vivado*.jou *.str README.hw address_map.json
+	$(RM) runs MMI_10g_sdt vivado*.log vivado*.jou *.str README.hw address_map.json
