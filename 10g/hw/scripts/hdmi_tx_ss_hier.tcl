@@ -151,7 +151,7 @@ proc create_hier_cell_hdmiphy_ss_0 { parentCell nameHier } {
   create_bd_pin -dir O irq
   create_bd_pin -dir I -type clk dru_ref_clk_in
   create_bd_pin -dir I -type clk dru_ref_clk_odiv2_in
-  create_bd_cell -type ip -vlnv xilinx.com:ip:hdmi_gt_controller hdmi_gt_controller
+  create_bd_cell -type ip -vlnv xilinx.com:ip:hdmi_gt_controller:2.0 hdmi_gt_controller
   set_property -dict [list \
     CONFIG.C_NEW_WIZ {1} \
     CONFIG.C_NIDRU {true} \
@@ -173,23 +173,23 @@ proc create_hier_cell_hdmiphy_ss_0 { parentCell nameHier } {
     CONFIG.Tx_Max_GT_Line_Rate {12.0} \
     CONFIG.check_refclk_selection {0} \
   ] [get_bd_cells hdmi_gt_controller]
-  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilreduced_logic urlp
+  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilreduced_logic:1.0 urlp
   set_property -dict [list \
     CONFIG.C_SIZE {1} \
   ] [get_bd_cells urlp]
-  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconcat xlcp
+  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconcat:1.0 xlcp
   set_property -dict [list \
     CONFIG.NUM_PORTS {1} \
   ] [get_bd_cells xlcp]
-  create_bd_cell -type ip -vlnv xilinx.com:ip:bufg_gt bufg_gt_rx
+  create_bd_cell -type ip -vlnv xilinx.com:ip:bufg_gt:1.0 bufg_gt_rx
   set_property -dict [list \
     CONFIG.FREQ_HZ {297000000.0} \
   ] [get_bd_cells bufg_gt_rx]
-  create_bd_cell -type ip -vlnv xilinx.com:ip:bufg_gt bufg_gt_tx
+  create_bd_cell -type ip -vlnv xilinx.com:ip:bufg_gt:1.0 bufg_gt_tx
   set_property -dict [list \
     CONFIG.FREQ_HZ {297000000.0} \
   ] [get_bd_cells bufg_gt_tx]
-  create_bd_cell -type ip -vlnv xilinx.com:ip:gtwiz_versal gtwiz_versal
+  create_bd_cell -type ip -vlnv xilinx.com:ip:gtwiz_versal:1.0 gtwiz_versal
   set_property -dict [list \
     CONFIG.INTF0_GT_DIRECTION {SIMPLEX_TX} \
     CONFIG.INTF0_GT_SETTINGS(GT_DIRECTION) {SIMPLEX_TX} \
@@ -391,15 +391,15 @@ proc create_hier_cell_gt_refclk_buf_ss_0 { parentCell nameHier } {
   create_bd_intf_pin -mode Slave -vlnv xilinx.com:interface:diff_clock_rtl:1.0 IBUFDSGT_IN
   create_bd_pin -dir O -from 0 -to 0 IBUFDSGT_OUT
   create_bd_pin -dir O -from 0 -to 0 IBUFDSGT_ODIV2_OUT
-  create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf bufg_gt
+  create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf:2.2 bufg_gt
   set_property -dict [list \
     CONFIG.C_BUF_TYPE {BUFG_GT} \
   ] [get_bd_cells bufg_gt]
-  create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf ibufdsgte
+  create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf:2.2 ibufdsgte
   set_property -dict [list \
     CONFIG.C_BUF_TYPE {IBUFDSGTE} \
   ] [get_bd_cells ibufdsgte]
-  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconstant vcc_const
+  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconstant:1.0 vcc_const
   set_property -dict [list \
     CONFIG.CONST_VAL {1} \
   ] [get_bd_cells vcc_const]
@@ -437,15 +437,15 @@ proc create_hier_cell_gt_refclk_buf_ss_1 { parentCell nameHier } {
   create_bd_intf_pin -mode Slave -vlnv xilinx.com:interface:diff_clock_rtl:1.0 IBUFDSGT_IN
   create_bd_pin -dir O -from 0 -to 0 IBUFDSGT_OUT
   create_bd_pin -dir O -from 0 -to 0 IBUFDSGT_ODIV2_OUT
-  create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf bufg_gt
+  create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf:2.2 bufg_gt
   set_property -dict [list \
     CONFIG.C_BUF_TYPE {BUFG_GT} \
   ] [get_bd_cells bufg_gt]
-  create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf ibufdsgte
+  create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf:2.2 ibufdsgte
   set_property -dict [list \
     CONFIG.C_BUF_TYPE {IBUFDSGTE} \
   ] [get_bd_cells ibufdsgte]
-  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconstant vcc_const
+  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconstant:1.0 vcc_const
   set_property -dict [list \
     CONFIG.CONST_VAL {1} \
   ] [get_bd_cells vcc_const]
@@ -483,15 +483,15 @@ proc create_hier_cell_gt_refclk_buf_ss_2 { parentCell nameHier } {
   create_bd_intf_pin -mode Slave -vlnv xilinx.com:interface:diff_clock_rtl:1.0 IBUFDSGT_IN
   create_bd_pin -dir O -from 0 -to 0 IBUFDSGT_OUT
   create_bd_pin -dir O -from 0 -to 0 IBUFDSGT_ODIV2_OUT
-  create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf bufg_gt
+  create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf:2.2 bufg_gt
   set_property -dict [list \
     CONFIG.C_BUF_TYPE {BUFG_GT} \
   ] [get_bd_cells bufg_gt]
-  create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf ibufdsgte
+  create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf:2.2 ibufdsgte
   set_property -dict [list \
     CONFIG.C_BUF_TYPE {IBUFDSGTE} \
   ] [get_bd_cells ibufdsgte]
-  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconstant vcc_const
+  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconstant:1.0 vcc_const
   set_property -dict [list \
     CONFIG.CONST_VAL {1} \
   ] [get_bd_cells vcc_const]
@@ -536,54 +536,54 @@ proc create_hier_cell_vfmc_ctlr_ss_0 { parentCell nameHier } {
   create_bd_pin -dir O -from 0 -to 0 VFMC_RX_ONSEMI_ENABLE
   create_bd_pin -dir I -type clk s_axi_aclk
   create_bd_pin -dir I -type rst s_axi_aresetn
-  create_bd_cell -type ip -vlnv xilinx.com:ip:axi_gpio vfmc_gpio
+  create_bd_cell -type ip -vlnv xilinx.com:ip:axi_gpio:2.0 vfmc_gpio
   set_property -dict [list \
     CONFIG.C_ALL_OUTPUTS {1} \
     CONFIG.C_GPIO_WIDTH {32} \
   ] [get_bd_cells vfmc_gpio]
-  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice vfmc_slice_bit0
+  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice:1.0 vfmc_slice_bit0
   set_property -dict [list \
     CONFIG.DIN_FROM {0} \
     CONFIG.DIN_TO {0} \
     CONFIG.DIN_WIDTH {32} \
     CONFIG.DOUT_WIDTH {1} \
   ] [get_bd_cells vfmc_slice_bit0]
-  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice vfmc_slice_bit1
+  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice:1.0 vfmc_slice_bit1
   set_property -dict [list \
     CONFIG.DIN_FROM {1} \
     CONFIG.DIN_TO {1} \
     CONFIG.DIN_WIDTH {32} \
     CONFIG.DOUT_WIDTH {1} \
   ] [get_bd_cells vfmc_slice_bit1]
-  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice vfmc_slice_bit2
+  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice:1.0 vfmc_slice_bit2
   set_property -dict [list \
     CONFIG.DIN_FROM {2} \
     CONFIG.DIN_TO {2} \
     CONFIG.DIN_WIDTH {32} \
     CONFIG.DOUT_WIDTH {1} \
   ] [get_bd_cells vfmc_slice_bit2]
-  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice vfmc_slice_bit16
+  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice:1.0 vfmc_slice_bit16
   set_property -dict [list \
     CONFIG.DIN_FROM {16} \
     CONFIG.DIN_TO {16} \
     CONFIG.DIN_WIDTH {32} \
     CONFIG.DOUT_WIDTH {1} \
   ] [get_bd_cells vfmc_slice_bit16]
-  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice vfmc_slice_bit17
+  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice:1.0 vfmc_slice_bit17
   set_property -dict [list \
     CONFIG.DIN_FROM {17} \
     CONFIG.DIN_TO {17} \
     CONFIG.DIN_WIDTH {32} \
     CONFIG.DOUT_WIDTH {1} \
   ] [get_bd_cells vfmc_slice_bit17]
-  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice vfmc_slice_bit18
+  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice:1.0 vfmc_slice_bit18
   set_property -dict [list \
     CONFIG.DIN_FROM {18} \
     CONFIG.DIN_TO {18} \
     CONFIG.DIN_WIDTH {32} \
     CONFIG.DOUT_WIDTH {1} \
   ] [get_bd_cells vfmc_slice_bit18]
-  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice vfmc_slice_bit19
+  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice:1.0 vfmc_slice_bit19
   set_property -dict [list \
     CONFIG.DIN_FROM {19} \
     CONFIG.DIN_TO {19} \
@@ -651,17 +651,17 @@ proc create_hier_cell_hdmi_tx_ss_hier { parentCell nameHier } {
   create_bd_pin -dir O hdmi_gt_irq
   create_bd_pin -dir O -type intr iic2intc_irpt
   create_bd_pin -dir O -type intr Mixer_irq
-  create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset rst_processor_1_300M
+  create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset:5.0 rst_processor_1_300M
   set_property -dict [list \
     CONFIG.C_NUM_INTERCONNECT_ARESETN {1} \
   ] [get_bd_cells rst_processor_1_300M]
-  create_bd_cell -type ip -vlnv xilinx.com:ip:axis_register_slice tx_video_axis_reg_slice
-  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice ilslice_5
+  create_bd_cell -type ip -vlnv xilinx.com:ip:axis_register_slice:1.1 tx_video_axis_reg_slice
+  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice:1.0 ilslice_5
   set_property -dict [list \
     CONFIG.DIN_TO {5} \
     CONFIG.DIN_WIDTH {8} \
   ] [get_bd_cells ilslice_5]
-  create_bd_cell -type ip -vlnv xilinx.com:ip:v_hdmi_txss1 v_hdmi_txss1
+  create_bd_cell -type ip -vlnv xilinx.com:ip:v_hdmi_txss1:1.2 v_hdmi_txss1
   set_property -dict [list \
     CONFIG.C_ADDR_WIDTH {10} \
     CONFIG.C_ADD_CORE_DBG {0} \
@@ -680,20 +680,20 @@ proc create_hier_cell_hdmi_tx_ss_hier { parentCell nameHier } {
     CONFIG.C_VID_INTERFACE {0} \
     CONFIG.C_VRR_SUPPORT {1} \
   ] [get_bd_cells v_hdmi_txss1]
-  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconstant ilconstant_1
+  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconstant:1.0 ilconstant_1
   set_property -dict [list \
     CONFIG.CONST_VAL {0} \
     CONFIG.CONST_WIDTH {192} \
   ] [get_bd_cells ilconstant_1]
-  create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset rst_processor_1_100M
+  create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset:5.0 rst_processor_1_100M
   set_property -dict [list \
     CONFIG.C_NUM_INTERCONNECT_ARESETN {1} \
   ] [get_bd_cells rst_processor_1_100M]
-  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconstant vcc_const
+  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconstant:1.0 vcc_const
   set_property -dict [list \
     CONFIG.CONST_VAL {1} \
   ] [get_bd_cells vcc_const]
-  create_bd_cell -type ip -vlnv xilinx.com:ip:clkx5_wiz clkx_wiz_0
+  create_bd_cell -type ip -vlnv xilinx.com:ip:clkx5_wiz:1.0 clkx_wiz_0
   set_property -dict [list \
     CONFIG.CLKOUT_DRIVES {BUFG,BUFG,BUFG,BUFG,BUFG,BUFG,BUFG} \
     CONFIG.CLKOUT_DYN_PS {None,None,None,None,None,None,None} \
@@ -708,7 +708,7 @@ proc create_hier_cell_hdmi_tx_ss_hier { parentCell nameHier } {
     CONFIG.USE_LOCKED {true} \
     CONFIG.USE_RESET {true} \
   ] [get_bd_cells clkx_wiz_0]
-  create_bd_cell -type ip -vlnv xilinx.com:ip:axi_noc2 axi_noc2_0
+  create_bd_cell -type ip -vlnv xilinx.com:ip:axi_noc2:1.1 axi_noc2_0
   set_property -dict [list \
     CONFIG.NUM_MI {0} \
     CONFIG.NUM_NMI {4} \
@@ -773,38 +773,38 @@ proc create_hier_cell_hdmi_tx_ss_hier { parentCell nameHier } {
   set_property -dict [list \
     CONFIG.ASSOCIATED_BUSIF {S00_AXI:S01_AXI:S02_AXI:S03_AXI:S04_AXI:S05_AXI:S06_AXI:S07_AXI} \
   ] [get_bd_pins axi_noc2_0/aclk0]
-  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilvector_logic util_vector_logic_0
+  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilvector_logic:1.0 util_vector_logic_0
   set_property -dict [list \
     CONFIG.C_OPERATION {not} \
     CONFIG.C_SIZE {1} \
   ] [get_bd_cells util_vector_logic_0]
-  create_bd_cell -type ip -vlnv xilinx.com:ip:axi_gpio axi_gpio
+  create_bd_cell -type ip -vlnv xilinx.com:ip:axi_gpio:2.0 axi_gpio
   set_property -dict [list \
     CONFIG.C_ALL_OUTPUTS {1} \
     CONFIG.C_DOUT_DEFAULT {0x000000FF} \
     CONFIG.C_GPIO_WIDTH {8} \
   ] [get_bd_cells axi_gpio]
-  create_bd_cell -type ip -vlnv xilinx.com:ip:video_cke_sync v_fifo_dc
-  create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect axi_smartconnect_0
+  create_bd_cell -type ip -vlnv xilinx.com:ip:video_cke_sync:1.0 v_fifo_dc
+  create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect:1.0 axi_smartconnect_0
   set_property -dict [list \
     CONFIG.ADVANCED_PROPERTIES {__experimental_features__ {legacy_low_area_mode 1}} \
     CONFIG.NUM_CLKS {2} \
     CONFIG.NUM_MI {7} \
     CONFIG.NUM_SI {1} \
   ] [get_bd_cells axi_smartconnect_0]
-  create_bd_cell -type ip -vlnv xilinx.com:ip:axi_iic axi_iic_0
+  create_bd_cell -type ip -vlnv xilinx.com:ip:axi_iic:2.1 axi_iic_0
   set_property -dict [list \
     CONFIG.TEN_BIT_ADR {7_bit} \
   ] [get_bd_cells axi_iic_0]
-  create_bd_cell -type ip -vlnv xilinx.com:ip:axi_timer axi_timer_0
+  create_bd_cell -type ip -vlnv xilinx.com:ip:axi_timer:2.0 axi_timer_0
   set_property -dict [list \
     CONFIG.COUNT_WIDTH {32} \
   ] [get_bd_cells axi_timer_0]
-  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconstant ilconstant_0
+  create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconstant:1.0 ilconstant_0
   set_property -dict [list \
     CONFIG.CONST_VAL {0} \
   ] [get_bd_cells ilconstant_0]
-  create_bd_cell -type ip -vlnv xilinx.com:ip:v_mix v_mix_1
+  create_bd_cell -type ip -vlnv xilinx.com:ip:v_mix:6.1 v_mix_1
   set_property -dict [list \
     CONFIG.AXIMM_ADDR_WIDTH {64} \
     CONFIG.IS_TILE_FORMAT {0} \
@@ -820,7 +820,9 @@ proc create_hier_cell_hdmi_tx_ss_hier { parentCell nameHier } {
     CONFIG.LAYER7_VIDEO_FORMAT {19} \
     CONFIG.LAYER8_VIDEO_FORMAT {19} \
     CONFIG.LAYER9_VIDEO_FORMAT {19} \
+    CONFIG.MAX_COLS {7680} \
     CONFIG.MAX_DATA_WIDTH {8} \
+    CONFIG.MAX_ROWS {4320} \
     CONFIG.NR_LAYERS {9} \
     CONFIG.SAMPLES_PER_CLOCK {8} \
   ] [get_bd_cells v_mix_1]

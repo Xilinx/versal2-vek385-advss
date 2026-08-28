@@ -48,18 +48,20 @@ proc update_VCU_hier { parentCell nameHier } {
   set_property -dict [list \
     CONFIG.C0_DEC_COLOR_DEPTH {1} \
     CONFIG.C0_DEC_COLOR_FORMAT {2} \
-    CONFIG.C0_DEC_FPS {1} \
+    CONFIG.C0_DEC_FPS {3} \
+    CONFIG.C0_DEC_FRAME_SIZE {4} \
     CONFIG.C0_ENC_COLOR_DEPTH {1} \
     CONFIG.C0_ENC_COLOR_FORMAT {2} \
-    CONFIG.C0_ENC_FPS {1} \
-    CONFIG.C0_ENC_SOURCE_FORMAT {1} \
+    CONFIG.C0_ENC_FPS {3} \
+    CONFIG.C0_ENC_FRAME_SIZE {4} \
+    CONFIG.C0_ENC_SOURCE_FORMAT {0} \
     CONFIG.C_TARGET_BOARD {1} \
     CONFIG.NSU_ONLY {false} \
   ] [get_bd_cells vcu2_0]
 
   # New instance: vcu_smartconnect_0
   if { [get_bd_cells -quiet vcu_smartconnect_0] eq "" } {
-    create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect vcu_smartconnect_0
+    create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect:1.0 vcu_smartconnect_0
     set_property -dict [list \
       CONFIG.NUM_MI {2} \
       CONFIG.NUM_SI {1} \
@@ -68,7 +70,7 @@ proc update_VCU_hier { parentCell nameHier } {
 
   # New instance: axi_gpio_0
   if { [get_bd_cells -quiet axi_gpio_0] eq "" } {
-    create_bd_cell -type ip -vlnv xilinx.com:ip:axi_gpio axi_gpio_0
+    create_bd_cell -type ip -vlnv xilinx.com:ip:axi_gpio:2.0 axi_gpio_0
     set_property -dict [list \
       CONFIG.C_ALL_OUTPUTS {1} \
       CONFIG.C_DOUT_DEFAULT {0x0000000F} \
@@ -78,7 +80,7 @@ proc update_VCU_hier { parentCell nameHier } {
 
   # New instance: ilslice_0
   if { [get_bd_cells -quiet ilslice_0] eq "" } {
-    create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice ilslice_0
+    create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice:1.0 ilslice_0
     set_property -dict [list \
       CONFIG.DIN_WIDTH {4} \
     ] [get_bd_cells ilslice_0]
@@ -86,7 +88,7 @@ proc update_VCU_hier { parentCell nameHier } {
 
   # New instance: ilslice_1
   if { [get_bd_cells -quiet ilslice_1] eq "" } {
-    create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice ilslice_1
+    create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice:1.0 ilslice_1
     set_property -dict [list \
       CONFIG.DIN_FROM {1} \
       CONFIG.DIN_TO {1} \
@@ -96,7 +98,7 @@ proc update_VCU_hier { parentCell nameHier } {
 
   # New instance: ilslice_2
   if { [get_bd_cells -quiet ilslice_2] eq "" } {
-    create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice ilslice_2
+    create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice:1.0 ilslice_2
     set_property -dict [list \
       CONFIG.DIN_FROM {2} \
       CONFIG.DIN_TO {2} \
@@ -106,7 +108,7 @@ proc update_VCU_hier { parentCell nameHier } {
 
   # New instance: ilslice_3
   if { [get_bd_cells -quiet ilslice_3] eq "" } {
-    create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice ilslice_3
+    create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilslice:1.0 ilslice_3
     set_property -dict [list \
       CONFIG.DIN_FROM {3} \
       CONFIG.DIN_TO {3} \
@@ -116,7 +118,7 @@ proc update_VCU_hier { parentCell nameHier } {
 
   # New instance: axi_noc2_0
   if { [get_bd_cells -quiet axi_noc2_0] eq "" } {
-    create_bd_cell -type ip -vlnv xilinx.com:ip:axi_noc2 axi_noc2_0
+    create_bd_cell -type ip -vlnv xilinx.com:ip:axi_noc2:1.1 axi_noc2_0
     set_property -dict [list \
       CONFIG.NUM_CLKS {4} \
       CONFIG.NUM_MI {0} \

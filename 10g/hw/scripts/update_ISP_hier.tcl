@@ -225,7 +225,7 @@ proc update_ISP_hier { parentCell nameHier } {
 
   # New instance: axi_noc2_0
   if { [get_bd_cells -quiet axi_noc2_0] eq "" } {
-    create_bd_cell -type ip -vlnv xilinx.com:ip:axi_noc2 axi_noc2_0
+    create_bd_cell -type ip -vlnv xilinx.com:ip:axi_noc2:1.1 axi_noc2_0
     set_property -dict [list \
       CONFIG.MI_SIDEBAND_PINS {} \
       CONFIG.NUM_CLKS {4} \
@@ -287,7 +287,7 @@ proc update_ISP_hier { parentCell nameHier } {
 
   # New instance: smartconnect_1
   if { [get_bd_cells -quiet smartconnect_1] eq "" } {
-    create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect smartconnect_1
+    create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect:1.0 smartconnect_1
     set_property -dict [list \
       CONFIG.ADVANCED_PROPERTIES {__experimental_features__ {legacy_low_area_mode 1}} \
       CONFIG.NUM_MI {7} \
@@ -297,12 +297,12 @@ proc update_ISP_hier { parentCell nameHier } {
 
   # New instance: axi_intc_0
   if { [get_bd_cells -quiet axi_intc_0] eq "" } {
-    create_bd_cell -type ip -vlnv xilinx.com:ip:axi_intc axi_intc_0
+    create_bd_cell -type ip -vlnv xilinx.com:ip:axi_intc:4.1 axi_intc_0
   }
 
   # New instance: ilconcat_0
   if { [get_bd_cells -quiet ilconcat_0] eq "" } {
-    create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconcat ilconcat_0
+    create_bd_cell -type inline_hdl -vlnv xilinx.com:inline_hdl:ilconcat:1.0 ilconcat_0
     set_property -dict [list \
       CONFIG.NUM_PORTS {4} \
     ] [get_bd_cells ilconcat_0]
@@ -310,12 +310,12 @@ proc update_ISP_hier { parentCell nameHier } {
 
   # New instance: proc_sys_reset_0
   if { [get_bd_cells -quiet proc_sys_reset_0] eq "" } {
-    create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset proc_sys_reset_0
+    create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset:5.0 proc_sys_reset_0
   }
 
   # New instance: mipi_csi2_rx_subsyst_0
   if { [get_bd_cells -quiet mipi_csi2_rx_subsyst_0] eq "" } {
-    create_bd_cell -type ip -vlnv xilinx.com:ip:mipi_csi2_rx_subsystem mipi_csi2_rx_subsyst_0
+    create_bd_cell -type ip -vlnv xilinx.com:ip:mipi_csi2_rx_subsystem:6.0 mipi_csi2_rx_subsyst_0
     set_property -dict [list \
       CONFIG.CMN_NUM_LANES {4} \
       CONFIG.CMN_NUM_PIXELS {4} \
@@ -334,7 +334,7 @@ proc update_ISP_hier { parentCell nameHier } {
 
   # New instance: mipi_csi2_rx_subsyst_1
   if { [get_bd_cells -quiet mipi_csi2_rx_subsyst_1] eq "" } {
-    create_bd_cell -type ip -vlnv xilinx.com:ip:mipi_csi2_rx_subsystem mipi_csi2_rx_subsyst_1
+    create_bd_cell -type ip -vlnv xilinx.com:ip:mipi_csi2_rx_subsystem:6.0 mipi_csi2_rx_subsyst_1
     set_property -dict [list \
       CONFIG.CMN_NUM_LANES {4} \
       CONFIG.CMN_NUM_PIXELS {4} \
@@ -353,7 +353,7 @@ proc update_ISP_hier { parentCell nameHier } {
 
   # New instance: mipi_csi2_rx_subsyst_2
   if { [get_bd_cells -quiet mipi_csi2_rx_subsyst_2] eq "" } {
-    create_bd_cell -type ip -vlnv xilinx.com:ip:mipi_csi2_rx_subsystem mipi_csi2_rx_subsyst_2
+    create_bd_cell -type ip -vlnv xilinx.com:ip:mipi_csi2_rx_subsystem:6.0 mipi_csi2_rx_subsyst_2
     set_property -dict [list \
       CONFIG.CMN_NUM_LANES {4} \
       CONFIG.CMN_NUM_PIXELS {4} \
@@ -372,7 +372,7 @@ proc update_ISP_hier { parentCell nameHier } {
 
   # New instance: mipi_csi2_rx_subsyst_3
   if { [get_bd_cells -quiet mipi_csi2_rx_subsyst_3] eq "" } {
-    create_bd_cell -type ip -vlnv xilinx.com:ip:mipi_csi2_rx_subsystem mipi_csi2_rx_subsyst_3
+    create_bd_cell -type ip -vlnv xilinx.com:ip:mipi_csi2_rx_subsystem:6.0 mipi_csi2_rx_subsyst_3
     set_property -dict [list \
       CONFIG.CMN_NUM_LANES {4} \
       CONFIG.CMN_NUM_PIXELS {4} \
@@ -575,9 +575,6 @@ proc update_ISP_hier { parentCell nameHier } {
   if { ([get_bd_nets -quiet -of_objects [get_bd_pins visp_ss_tile0/tile1_nsu_axi_clk]] eq "" || [get_bd_nets -quiet -of_objects [get_bd_pins ISP_Tile1_ConfigNoc/aclk0]] eq "") || !([get_bd_nets -quiet -of_objects [get_bd_pins visp_ss_tile0/tile1_nsu_axi_clk]] eq [get_bd_nets -quiet -of_objects [get_bd_pins ISP_Tile1_ConfigNoc/aclk0]]) } {
     catch { connect_bd_net -net visp_ss_tile0_tile1_nsu_axi_clk [get_bd_pins visp_ss_tile0/tile1_nsu_axi_clk] [get_bd_pins ISP_Tile1_ConfigNoc/aclk0] }
   }
-
-
-
 
   current_bd_instance $oldCurInst
 }

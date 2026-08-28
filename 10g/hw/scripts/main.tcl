@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: MIT
 # -----------------------------------------------
 
-
-
 # Parse command line arguments
 set ::jobs 8
 for {set i 0} {$i < [llength $::argv]} {incr i} {
@@ -51,14 +49,14 @@ source $scripts_dir/update_ISP_hier.tcl
 source $scripts_dir/hdmi_tx_ss_hier.tcl
 create_hier_cell_hdmi_tx_ss_hier / hdmi_tx_ss_hier
 
-create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect smartconnect_0
+create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect:1.0 smartconnect_0
 set_property -dict [list \
   CONFIG.NUM_CLKS {2} \
   CONFIG.NUM_MI {3} \
   CONFIG.NUM_SI {1} \
 ] [get_bd_cells smartconnect_0]
-create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset proc_sys_reset_0
-create_bd_cell -type ip -vlnv xilinx.com:ip:clkx5_wiz clkx5_wiz_0
+create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset:5.0 proc_sys_reset_0
+create_bd_cell -type ip -vlnv xilinx.com:ip:clkx5_wiz:1.0 clkx5_wiz_0
 set_property -dict [list \
   CONFIG.CLKOUT_REQUESTED_OUT_FREQUENCY {300.000,150.000,200,100.000,100.000,100.000,100.000} \
   CONFIG.CLKOUT_USED {true,true,true,true,false,false,false} \
@@ -66,17 +64,17 @@ set_property -dict [list \
   CONFIG.USE_LOCKED {true} \
   CONFIG.USE_RESET {true} \
 ] [get_bd_cells clkx5_wiz_0]
-create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect smartconnect_2
+create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect:1.0 smartconnect_2
 set_property -dict [list \
   CONFIG.NUM_CLKS {1} \
   CONFIG.NUM_MI {2} \
   CONFIG.NUM_SI {1} \
 ] [get_bd_cells smartconnect_2]
-create_bd_cell -type ip -vlnv xilinx.com:ip:axi_iic axi_iic_0
+create_bd_cell -type ip -vlnv xilinx.com:ip:axi_iic:2.1 axi_iic_0
 set_property -dict [list \
   CONFIG.IIC_FREQ_KHZ {1000} \
 ] [get_bd_cells axi_iic_0]
-create_bd_cell -type ip -vlnv xilinx.com:ip:axi_iic axi_iic_1
+create_bd_cell -type ip -vlnv xilinx.com:ip:axi_iic:2.1 axi_iic_1
 set_property -dict [list \
   CONFIG.IIC_FREQ_KHZ {1000} \
 ] [get_bd_cells axi_iic_1]
@@ -158,6 +156,7 @@ connect_bd_intf_net [get_bd_intf_pins smartconnect_2/M01_AXI] [get_bd_intf_pins 
 
 disconnect_bd_net /ilconstant_1_dout [get_bd_pins ps_wizard_0/fpd_axi_pl_aclk]
 disconnect_bd_net /ilconstant_1_dout [get_bd_pins ps_wizard_0/lpd_axi_pl_aclk]
+
 connect_bd_net -net IDT8T49N241_LOL_IN_0_1 [get_bd_ports IDT8T49N241_LOL_IN] [get_bd_pins hdmi_tx_ss_hier/IDT8T49N241_LOL_IN]
 connect_bd_net -net ISP_hier_irq [get_bd_pins ISP_hier/irq] [get_bd_pins ps_wizard_0/pl_lpd_irq21]
 connect_bd_net -net ISP_hier_tile0_isp0_fusa_irq [get_bd_pins ISP_hier/tile0_isp0_fusa_irq] [get_bd_pins ps_wizard_0/pl_lpd_irq2]
