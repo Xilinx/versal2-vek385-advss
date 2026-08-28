@@ -1,42 +1,53 @@
 # Copyright (c) 2026 Advanced Micro Devices, Inc.
 # SPDX-License-Identifier: MIT
 # -----------------------------------------------
-
-
+SHELL := /bin/bash
 
 RM = rm -rf
+PWD = $(shell readlink -f .)
+
 VIVADO = $(XILINX_VIVADO)/bin/vivado
+SDTGEN = $(XILINX_VIVADO)/bin/sdtgen
+JOBS ?= 8
+VIV_PRJ_DIR = $(PWD)/runs/MMI_10G
+VIV_SCRIPTS_DIR = scripts
 
-NPROC := $(shell nproc)
-JOBS := $(shell echo $$(( $(NPROC) - 2 )))
+VIV_TIMING_ERROR = "CRITICAL WARNING: \[Timing 38-282\] The design failed to meet the timing requirements"
 
-DESIGN ?= MMI_10g
+VIV_DESIGN = MMI_10G
+VIV_XSA = $(VIV_PRJ_DIR)/$(VIV_DESIGN).xsa
+VIV_SRC = $(VIV_SCRIPTS_DIR)/main.tcl
 
-# valid designs
-DESIGN_LIST = MMI_10g
-
+SDT_SRC = $(PWD)/gen_sdt.tcl
 
 .PHONY: help
 help:
 	@echo 'Usage:'
 	@echo ''
-	@echo '  make all DESIGN=<design> '
-	@echo '    Generate xsa for platform generation'
-	@echo '    Valid options for DESIGN: ${DESIGN_LIST}'
+	@echo '  make xsa [JOBS=<n>]'
+	@echo '    Generate xsa '
+	@echo ''
+	@echo '  make sdt'
+	@echo '    Generate sdt files'
+	@echo ''
+	@echo '  make all [JOBS=<n>]'
+	@echo '    Generate xsa and sdt files'
+	@echo ''
+	@echo '  Options:'
+	@echo '    JOBS: optional param to set number of synthesis jobs (default: 8)'
 	@echo ''
 
 .PHONY: all
-all: sdt
+all: xsa sdt
 
-.PHONY: sdt
-sdt: runs/MMI_10G/MMI_10G.xsa
-	${VIVADO} -mode batch -s ./gen_sdt.tcl -tclargs -xsa_path runs/MMI_10G/MMI_10G.xsa
+xsa: $(VIV_XSA)
+$(VIV_XSA): $(VIV_SRC)
+	$(VIVADO) -mode batch -notrace -source $(VIV_SRC) -tclargs -jobs $(JOBS)
+	@grep $(VIV_TIMING_ERROR) vivado.log; if [ $$? = 0 ]; then exit 1; fi
 
-.PHONY: runs/MMI_10G/MMI_10G.xsa
-runs/MMI_10G/MMI_10G.xsa:
-	@if [ -d runs ]; then echo "Removing existing runs/ ..."; $(RM) runs; fi
-	${VIVADO} -mode batch -s ./scripts/main.tcl -tclargs -jobs $(JOBS)
+sdt: $(SDT_SRC) $(VIV_XSA)
+	$(SDTGEN) $(SDT_SRC) -xsa_path $(VIV_XSA)
 
 .PHONY: clean
 clean:
-	$(RM) runs MMI_10g_sdt vivado*.log vivado*.jou *.str README.hw address_map.json
+	$(RM) $(VIV_PRJ_DIR) vivado* .Xil *dynamic* *.log *.xpe .crashReporter hd_visual *.swp
