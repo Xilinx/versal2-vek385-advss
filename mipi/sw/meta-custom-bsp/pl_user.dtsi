@@ -8,5 +8,7 @@
 	/delete-node/ mipi_csi2_rx_subsystem@b0022000;
 	/delete-node/ axis_broadcasterISP_hier_axis_broadcaster_0@0;
 	/delete-node/ axis_broadcasterISP_hier_axis_broadcaster_1@0;
+	/delete-node/ visp_mbox_rpu_7;
+	/delete-node/ visp_mbox_rpu_8;
 	
 };
