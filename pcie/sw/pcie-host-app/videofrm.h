@@ -31,29 +31,32 @@
 #include <QWidget>
 #include <QPixmap>
 #include <QDateTime>
+#include <thread>
+#include <mutex>
+#include <atomic>
+#include <time.h>
 
 class videofrm : public QWidget
 {
     Q_OBJECT
 public:
     explicit videofrm(QWidget *parent = nullptr);
+    ~videofrm();
 
     int fmcount = 0;
     bool waitBuf = false;
     QTimer * t;
     uchar *b;
     QByteArray ba;
-    int counter = 0;
     int sizeval = 0;
     QString vfilename;
-    char * yuvfrm;
-    uchar * dfrm;
+    char * yuvfrm = nullptr;
+    uchar * dfrm = nullptr;
     QDateTime dg;
     int WID = 1920;
     int HEI = 1080;
     int FPS = 30;
-    int testcnt = 0;
-    bool hasWindow;
+    bool hasWindow = false;
     int convert_yuv_to_rgb_buffer(unsigned char *yuv, unsigned char *rgb, unsigned int width, unsigned int height);
     void config_frame();
     void setResolution(int wi, int he, int fp);
@@ -66,7 +69,25 @@ signals:
     void updateFPS(int);
     void stopTimersig();
     void ctrlc();
-};
 
+private:
+    /* --- conversion worker thread (Issue #4 fix) --- */
+    std::thread         convert_thread_;
+    std::mutex          dfrm_mutex_;      /* guards dfrm_work_/dfrm_ready_ swap and new_frame_ready_ */
+    std::atomic<bool>   worker_running_{false};
+    uchar              *dfrm_work_  = nullptr;   /* worker writes converted BGR here   */
+    uchar              *dfrm_ready_ = nullptr;   /* Qt timer reads BGR from here        */
+    bool                new_frame_ready_ = false; /* set by worker, cleared by timer    */
+
+    /* --- diagnostics --- */
+    std::atomic<uint64_t> frames_displayed_{0};    /* frames actually shown via imshow    */
+    std::atomic<uint64_t> frames_overwritten_{0};  /* TRUE drops: worker overwrote unconsumed frame */
+    struct timespec       fps_ts_start_{};         /* set on first imshow, not config_frame */
+    struct timespec       fps_ts_window_{};        /* window start for per-30-frame display fps */
+    bool                  fps_ts_initialized_{false};
+
+    void convertAndDisplayWorker();
+    void stopConvertThread();
+};
 
 #endif // VIDEO_H
