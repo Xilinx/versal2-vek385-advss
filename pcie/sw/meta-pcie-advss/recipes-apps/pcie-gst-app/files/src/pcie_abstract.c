@@ -29,6 +29,7 @@
 #define SET_WRITE_TRANSFER_DONE   0x7
 #define CLR_WRITE_TRANSFER_DONE   0x8
 #define GET_RESOLUTION            0x9
+#define GET_FORMAT                0xc  /* reads PCIRC_FORMAT_SET: 1=YUY2 2=BGR 3=NV12 */
 #define GET_FPS                   0xb
 #define GET_FILTER_TYPE           0xd
 #define ALLOC_DMA_BUFF            0xe
@@ -242,6 +243,19 @@ gint pcie_get_usecase_type(gint fpga_fd, guint *usecase)
         ret = ioctl(fpga_fd, GET_USE_CASE, usecase);
         if (ret < 0)
             GST_ERROR ("Failed to run ioctl to get use-case type");
+    }
+
+    return ret;
+}
+
+gint pcie_get_format(gint fpga_fd, guint *format)
+{
+    gint ret = -EINVAL;
+
+    if (fpga_fd >= 0) {
+        ret = ioctl(fpga_fd, GET_FORMAT, format);
+        if (ret < 0)
+            GST_ERROR ("Failed to run ioctl to get format type");
     }
 
     return ret;

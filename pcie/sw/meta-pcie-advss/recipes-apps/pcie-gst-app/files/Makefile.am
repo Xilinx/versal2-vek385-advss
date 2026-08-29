@@ -36,14 +36,12 @@ PCI_LIBS_PKG_CONFIG = $$(pkg-config --libs gstreamer-1.0 gstreamer-plugins-base-
 pcie_gst_app_SOURCES = $(pcie_gst_app_SRC_DIR)/pcie_main.c \
                        $(pcie_gst_app_SRC_DIR)/pcie_src.c \
                        $(pcie_gst_app_SRC_DIR)/pcie_abstract.c \
-                       $(pcie_gst_app_SRC_DIR)/pcie_sink.c \
-                       $(pcie_gst_app_SRC_DIR)/dpu_pipe.cpp
+                       $(pcie_gst_app_SRC_DIR)/pcie_sink.c
 
 nodist_pcie_gst_app_SOURCES = $(pcie_gst_app_INC_DIR)/pcie_main.h \
                               $(pcie_gst_app_INC_DIR)/pcie_src.h \
                               $(pcie_gst_app_INC_DIR)/pcie_abstract.h \
-                              $(pcie_gst_app_INC_DIR)/pcie_sink.h \
-                              $(pcie_gst_app_INC_DIR)/dpu_pipe.h
+                              $(pcie_gst_app_INC_DIR)/pcie_sink.h
 
 pcie_gst_app_CFLAGS = $(PCI_CFLAGS_PKG_CONFIG) -I$(pcie_gst_app_INC_DIR) -g
 pcie_gst_app_CPPFLAGS = $(PCI_CFLAGS_PKG_CONFIG) -I$(pcie_gst_app_INC_DIR) -g

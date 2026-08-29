@@ -46,7 +46,46 @@
 #include <gst/gst.h>
 
 #define DEVICE_NAME             "/dev/pciep0"
-#define MAX_BUFFER_POOL_SIZE    3
+
+/*
+ * ============================================================================
+ * EP DMA BUFFER POOL DEPTH
+ * ============================================================================
+ * Number of endpoint dma-bufs cycled by pciesrc / pciesink.
+ *
+ * THIS VALUE MUST STAY EQUAL TO NUM_BUFFERS IN
+ *   driver_src/xilinx_pci_endpoint.c
+ * The driver allocates NUM_BUFFERS DMA-coherent buffers at probe time and
+ * exports them; this app maps them one at a time via MAP_DMA_BUFF.  If this
+ * value exceeds NUM_BUFFERS the map ioctl fails; if it is smaller the extra
+ * driver buffers are never used.
+ *
+ * Why 6 -- 4 minimum in-flight + 2 headroom:
+ *   1. H2C DMA in progress          (host writing into the buffer)
+ *   2. queued in perf/appsink       (handed downstream by pciesrc)
+ *   3. held by appsink until its PTS (appsink sync=TRUE for UC2+)
+ *   4. C2H DMA in progress          (host reading out of the buffer)
+ *   5-6. headroom for GStreamer scheduling jitter, slow appsink,
+ *        or pipeline element queuing that temporarily holds an extra
+ *        buffer -- prevents the critical H2C/C2H collision.
+ *
+ * Do NOT reduce this below 4.  With a shallower pool pciesrc re-arms a buffer
+ * for H2C while pciesink is still C2H-ing it.  The host QDMA then reads and
+ * writes the same 24.8 MB EP DDR region concurrently over the NoC, the
+ * transaction never retires, and the host hits its 10 s DMA timeout
+ * ("W off 0x... failed -1", EIO), followed by read_complete / write_complete
+ * timeouts on the endpoint.
+ *
+ * This value also sets the recycle lag in pcie_src.c: a buffer is unmapped
+ * MAX_BUFFER_POOL_SIZE frames after it was mapped, so raising it increases
+ * both the pool depth and the safety margin.
+ *
+ * NOTE: unrelated to the host application's staging ring depths
+ * (HOST_DISPLAY_RING_DEPTH / HOST_FILE_RING_DEPTH in pcie_host.h) -- those
+ * are host-DDR queues, not EP DMA buffers.
+ * ============================================================================
+ */
+#define MAX_BUFFER_POOL_SIZE    6
 
 typedef struct resolution {
     guint width;
@@ -278,6 +317,19 @@ gint pcie_num_dma_buf(gint fpga_fd);
  * @return 0 on success
  */
 gint pcie_get_usecase_type(gint fpga_fd, guint *usecase);
+
+/**
+ * @brief Get video format (NV12, YUY2, BGR) set by the host application.
+ *
+ * Reads the PCIRC_FORMAT_SET register via the GET_FORMAT ioctl.
+ * Returns VGST_FORMAT_YUY2 (1), VGST_FORMAT_BGR (2), or VGST_FORMAT_NV12 (3).
+ *
+ * @param[in]  fpga_fd pcie ep device node file descriptor.
+ * @param[out] format  format value written by host (VGST_FORMAT_*)
+ *
+ * @return 0 on success, negative on error
+ */
+gint pcie_get_format(gint fpga_fd, guint *format);
 
 /**
  * @brief closes pcie end point device node.

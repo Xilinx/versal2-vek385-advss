@@ -21,6 +21,8 @@
  ********************************************************************/
 
 #include <pcie_sink.h>
+#include <time.h>
+#include <unistd.h>  /* usleep */
 
 GST_DEBUG_CATEGORY_EXTERN (pcie_gst_app_debug);
 #define GST_CAT_DEFAULT pcie_gst_app_debug
@@ -31,8 +33,40 @@ GstFlowReturn new_sample_cb (GstElement* elt, App* app)
     GstBuffer *buffer = NULL;
     GstMemory *mem    = NULL;
     gint      ret     = 0;
+    static struct timespec ts_last = {0, 0};
+    static guint64 local_count = 0;
+
+    /* ── Frame-rate limiter ────────────────────────────────────────────
+     * After a stall (e.g. read_complete timeout), running_time advances
+     * far past all buffer PTS values.  GstBaseSink's sync=TRUE detects
+     * every buffer as "late" and renders without waiting, causing a
+     * 1000+ fps burst that overwhelms the host display queue and
+     * overwrites frames before they are displayed.
+     *
+     * Enforce a minimum inter-frame interval of 1000/fps ms so the C2H
+     * rate never exceeds the target fps, regardless of clock drift.
+     * This does NOT fire during normal operation because sync=TRUE
+     * already spaces frames at ~33 ms (30 fps). */
+    {
+        static struct timespec ts_prev_write = {0, 0};
+        struct timespec ts_now;
+        clock_gettime(CLOCK_MONOTONIC, &ts_now);
+        if (ts_prev_write.tv_sec != 0 && app->h_param.fps > 0) {
+            double elapsed_ms = (ts_now.tv_sec - ts_prev_write.tv_sec) * 1000.0
+                              + (ts_now.tv_nsec - ts_prev_write.tv_nsec) / 1e6;
+            double frame_ms = 1000.0 / app->h_param.fps;
+            if (elapsed_ms < frame_ms) {
+                long sleep_us = (long)((frame_ms - elapsed_ms) * 1000.0);
+                if (sleep_us > 0 && sleep_us < 100000)  /* cap at 100 ms */
+                    usleep(sleep_us);
+                clock_gettime(CLOCK_MONOTONIC, &ts_now);
+            }
+        }
+        ts_prev_write = ts_now;
+    }
 
     app->appsink_framecnt++;
+    local_count++;
 
     /* get the sample from appsink */
     sample = gst_app_sink_pull_sample (GST_APP_SINK (elt));
@@ -88,6 +122,20 @@ GstFlowReturn new_sample_cb (GstElement* elt, App* app)
 
     gst_sample_unref (sample);
     GST_DEBUG ("Appsink: processed frame-count -> %lu", app->appsink_framecnt);
+
+    /* Per-30-frame throughput log */
+    if (local_count % 30 == 0) {
+        struct timespec ts_now;
+        clock_gettime(CLOCK_MONOTONIC, &ts_now);
+        if (ts_last.tv_sec != 0) {
+            double elapsed = (ts_now.tv_sec  - ts_last.tv_sec) +
+                             (ts_now.tv_nsec - ts_last.tv_nsec) / 1e9;
+            g_print("[pcie_sink] 30 frames in %.3f s (%.1f fps) "
+                    "total_appsink=%lu\n",
+                    elapsed, 30.0 / elapsed, app->appsink_framecnt);
+        }
+        ts_last = ts_now;
+    }
 
     return GST_FLOW_OK;
 }
