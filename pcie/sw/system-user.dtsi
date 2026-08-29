@@ -1,0 +1,73 @@
+# Copyright (c) 2026 Advanced Micro Devices, Inc.
+# SPDX-License-Identifier: MIT
+# -----------------------------------------------
+
+/delete-node/ &ISP_hier_axi_iic_0;
+/delete-node/ &ISP_hier_mipi_csi2_rx_subsyst_0;
+/delete-node/ &ISP_hier_mipi_csi2_rx_subsyst_0_phy;
+/delete-node/ &ISP_hier_mipi_csi2_rx_subsyst_0_rx;
+/delete-node/ &ISP_hier_visp_ss_tile0ISP_hier_mipi_csi2_rx_subsyst_0;
+/delete-node/ &visp_ss_01;
+/delete-node/ &visp_ss_12;
+/delete-node/ &visp_ss_13;
+/delete-node/ &visp_ss_25;
+/delete-node/ &visp_ss_24;
+/delete-node/ &visp_mbox_rpu_8;
+/delete-node/ &visp_mbox_rpu_7;
+
+&pl_pcie_pcie_reg_space_0 {
+        interrupt-parent = <&pl_pcie_axi_intc_0>;
+        interrupts = < 0 4 >,  < 1 4 >,  < 2 4 >;
+        interrupt-names = "read", "write", "close";
+        memory-region = <&pciep_driver>; 
+};
+
+
+    &visp_mbox_rpu_6 {
+        //memory-region = <&isp_mbox_buffer>;
+        rproc = <&r52_6>;
+        memory-region = <&{/reserved-memory/isp_mbox_buffer@1E0A8000}>;
+        //rproc = <&{/remoteproc@ebb80000/r52f@0}>;
+        test = <1>;
+    };
+
+&amba { /* NOT WORKING */
+	sdi_fmc: sdi-fmc {
+		compatible = "xlnx,sdi-fmc";
+	};
+};
+
+&{/reserved-memory} {
+    pciep_driver: buffer@31000000 {
+            compatible = "shared-dma-pool";
+            //label = "cma_reserved_31000000";
+            reg = <0x00 0x31000000 0x00 0x10000000>;
+            reusable;
+        };
+};
+
+&{/remoteproc@ebb80000} {
+		compatible = "xlnx,versal-net-r52fss";
+		#address-cells = <0x02>;
+		#size-cells = <0x02>;
+		xlnx,cluster-mode = <0x00>;
+		ranges = <0x00 0x00 0x00 0xebb80000 0x00 0x10000 0x00 0x10000 0x00 0xebb90000 0x00 0x8000 0x00 0x18000 0x00 0xebba0000 0x00 0x8000 0x01 0x00 0x00 0xebbc0000 0x00 0x10000 0x01 0x10000 0x00 0xebbd0000 0x00 0x8000 0x01 0x18000 0x00 0xebbe0000 0x00 0x8000>;
+
+		r52_6: r52f@0 {
+			phandle = <0x22>;
+			compatible = "xlnx,versal2-r52f";
+			power-domains = <0xc7 0x181100f3 0xc7 0x18318106 0xc7 0x18318107 0xc7 0x18318108>;
+			reg = <0x00 0x00 0x00 0x10000 0x00 0x10000 0x00 0x8000 0x00 0x18000 0x00 0x8000>;
+			reg-names = "r52_0a_atcm_global@eba00000\0r52_0a_btcm_global@eba10000\0r52_0a_ctcm_global@eba20000";
+			memory-region = <0x01>;
+		};
+
+		r52_7: r52f@1 {
+			phandle = <0x23>;
+			compatible = "xlnx,versal2-r52f";
+			power-domains = <0xc7 0x181100f4 0xc7 0x18318109 0xc7 0x1831810a 0xc7 0x1831810b>;
+			reg = <0x01 0x00 0x00 0x10000 0x01 0x10000 0x00 0x8000 0x01 0x18000 0x00 0x8000>;
+			reg-names = "r52_0a_atcm_global@eba00000\0r52_0a_btcm_global@eba10000\0r52_0a_ctcm_global@eba20000";
+			memory-region = <0x03>;
+		};
+	};

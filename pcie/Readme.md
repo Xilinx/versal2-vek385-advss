@@ -7,14 +7,14 @@
 ## PCIe ADVSS Hardware Design
 
 The PCIe ADVSS hardware design targets:
-- **MIPI CSI2Rx → ISP → PS DP Display passthrough pipeline** at **1080p30 @ 8bpp**
-- **MIPI CSI2Rx → ISP → PCIe → Host QT application Display pipeline** at **1080p30 @ 8bpp**
+- **MIPI CSI2Rx → ISP → PS DP Display passthrough pipeline** at **4Kp30 @ 8bpp**
+- **MIPI CSI2Rx → ISP → PCIe → Host QT application Display pipeline** at **4Kp30 @ 8bpp**
 
 The hardware design is targeted for the **VEK385 Rev-B1** board.
 
 ### Tools Version
 
-- **Vivado™ 2025.2**
+- **Vivado™ 2026.1**
 
 ### Build Instructions
 
@@ -33,5 +33,5 @@ The following sections describe the steps required to build the hardware design 
 1. Navigate to the pcie/sw folder.
 2. Run the following command:
    ```bash
-   make artifacts
+   make build
 3. Output images will be available in `/pcie/sw/artifacts` directory.
