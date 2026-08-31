@@ -50,4 +50,4 @@ sdt: $(SDT_SRC) $(VIV_XSA)
 
 .PHONY: clean
 clean:
-	$(RM) $(VIV_PRJ_DIR) vivado* .Xil *dynamic* *.log *.xpe .crashReporter hd_visual *.swp
+	$(RM) $(VIV_PRJ_DIR) vivado* .Xil *dynamic* *.log *.xpe .crashReporter hd_visual *.swp MMI_10g_sdt
