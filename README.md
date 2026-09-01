@@ -11,7 +11,7 @@ The following is a list of Platform Designs available:
 | Platform Name  | Description | Links |
 | ---------------|------------- | -------------- |
 |HDMI AdvSS | The HDMI AdvSS provides high-performance HDMI 2.1 video processing and VCU2 capabilities:<ul><li>HDMI-2.1 Rx → VPSS → FBWR → DDR → FBRD → HDMI-2.1 Tx passthrough pipeline at 8Kp30 </li><li>HDMI-2.1 RX → VPSS → FBWR → DDR → VCU2 Encode → DDR → VCU2 Decode → DDR → FBRD → HDMI-2.1 TX pipeline at 4Kp60 </li><li>Supports both hardware and software components</li><li>Optimized for ultra-high definition video processing</li></ul> | <ul><li>[Documentation](https://xilinx-wiki.atlassian.net/wiki/x/GwBp8)</li><li>[Prebuilt images](https://account.amd.com/en/forms/downloads/design-license-xef.html?filename=vek385-hdmi-2026.1-prebuilt-images.zip)</li><li>[Sources and License](https://account.amd.com/en/forms/downloads/design-license-xef.html?filename=vek385-hdmi-2026.1-sources-licenses.zip)</li></ul>|
-|MIPI AdvSS | Yet to Publish |  |
+|MIPI AdvSS | The VEK385 MIPI AdvSS platform captures video from MIPI 4x capture source (1920x1080 @ 30 fps) and displays it on the 4K HDMI-2.1 Tx monitor. <ul><li> 4x MIPI -> ISP-MCM → Mixer → HDMI-2.1 Tx at 4kp30</li></ul> | <ul><li>[Documentation](https://xilinx-wiki.atlassian.net/wiki/x/wgBp8)</li><li>[Prebuilt images](https://account.amd.com/en/forms/downloads/design-license-xef.html?filename=vek385-mipi-2026.1-prebuilt-images.zip)</li><li>[Sources and License](https://account.amd.com/en/forms/downloads/design-license-xef.html?filename=vek385-mipi-2026.1-sources-licenses.zip)</li></ul> |
 |10Gb Ethernet AdvSS |  Yet to Publish |  ||
 |12G SDI AdvSS |  Yet to Publish |  ||
 |PCIe AdvSS |  Yet to Publish |  ||
