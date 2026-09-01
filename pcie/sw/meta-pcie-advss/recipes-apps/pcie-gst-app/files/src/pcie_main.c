@@ -23,19 +23,31 @@
 #include <pcie_main.h>
 #include <pcie_src.h>
 #include <pcie_sink.h>
-#include <dpu_pipe.h>
+#include <unistd.h>  /* usleep */
+#include <signal.h>
 
 #define KMSSINK_BUS_ID "edd00000.mmi_dc"
 #define KMSSINK_PLAN_ID 36
-//#define PCIE_FILESINK
-//Enable above macro to dump frame into file using filesink instead of \
-//displaying using kmssink
 
-static gchar* aitask = (gchar*)"facedetect";
 App s_app = {0};
 GST_DEBUG_CATEGORY (pcie_gst_app_debug);
 
 #define GST_CAT_DEFAULT pcie_gst_app_debug
+
+/* ── SIGINT / Ctrl+C handler ───────────────────────────────────────────────
+ * On Ctrl+C, quit the GLib main loop so the normal cleanup path in main()
+ * runs.  This ensures /dev/pciep0 is closed (which triggers the driver's
+ * release(), clearing buffer-ready bits and resetting completions) and
+ * read_write_transfer_done() signals the host that the EP is done.
+ * SA_RESETHAND makes a second Ctrl+C do a hard kill (escape hatch).
+ * ──────────────────────────────────────────────────────────────────────── */
+static void sigint_quit_handler(int sig)
+{
+    (void)sig;
+    g_print("\n[SIGINT] Ctrl+C received — shutting down gracefully\n");
+    if (s_app.loop && g_main_loop_is_running(s_app.loop))
+        g_main_loop_quit(s_app.loop);
+}
 
 static gboolean bus_message (GstBus *bus, GstMessage *message, App *app)
 {
@@ -55,7 +67,7 @@ static gboolean bus_message (GstBus *bus, GstMessage *message, App *app)
             break;
 
         case GST_MESSAGE_ERROR:
-            gst_message_parse_info (message, &err, &debug);
+            gst_message_parse_error (message, &err, &debug);
             if(err && message) {
                 GST_ERROR ("Received ERROR from %s: %s",
                 GST_MESSAGE_SRC_NAME (message), err->message);
@@ -95,6 +107,8 @@ static void read_write_transfer_done (App* app)
 {
     gint ret = 0;
 
+    GST_INFO ("[pcie_main] read_write_transfer_done: signalling host");
+
     /* Avoid sending read transfer done in mipi use-case */
     if (app->h_param.usecase > VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS) {
         ret = pcie_set_read_transfer_done(app->fd);
@@ -107,8 +121,7 @@ static void read_write_transfer_done (App* app)
     if (ret >= 0)
         GST_DEBUG ("set write transfer done");
 
-    /* Delay between set and clear r/w done registers */
-    sleep (RW_DONE_SET_AND_CLEAR_DELAY);
+    /* RW_DONE_SET_AND_CLEAR_DELAY is 0 — no sleep needed */
 
     /* Avoid clearing read transfer done in mipi use-case */
     if (app->h_param.usecase > VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS) {
@@ -121,6 +134,8 @@ static void read_write_transfer_done (App* app)
     ret = pcie_clr_write_transfer_done(app->fd);
     if (ret >= 0)
         GST_DEBUG ("clear write transfer done");
+
+    GST_INFO ("[pcie_main] read_write_transfer_done: complete");
 }
 
 static GstPadProbeReturn appsink_query_cb (GstPad *pad G_GNUC_UNUSED,
@@ -174,28 +189,33 @@ static gint set_host_parameters(App *app)
         return PCIE_GST_APP_FAIL;
     }
 
-    GST_INFO ("Usecase type is %d",app->h_param.usecase);
-    if ((app->h_param.usecase == VGST_USECASE_TYPE_NONE) ||
-        (app->h_param.usecase >= VGST_USECASE_TYPE_MAX)) {
-        GST_ERROR ("Provided usecase type is not supported, received "
-                   "usecase type - %u", app->h_param.usecase);
+    GST_INFO ("Usecase type is %d", app->h_param.usecase);
+    if (app->h_param.usecase != VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS &&
+        app->h_param.usecase != VGST_USECASE_TYPE_APPSRC_TO_HOST_BYPASS) {
+        GST_ERROR ("Unsupported usecase type %u — only UC1 (1) and UC2 (2) are supported",
+                   app->h_param.usecase);
         return PCIE_GST_APP_FAIL;
     }
 
-    /* Get input file length */
-    if (app->h_param.usecase >= VGST_USECASE_TYPE_APPSRC_TO_HOST ) {
+    /* Get input file length (UC2 only — file from host) */
+    if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_TO_HOST_BYPASS) {
         ret = pcie_get_file_length(app->fd, &(app->h_param.length));
-        if(ret < 0) {
+        if (ret < 0) {
             GST_ERROR ("Failed to get file length");
             return PCIE_GST_APP_FAIL;
         }
-        GST_INFO("Input file length is %lu",app->h_param.length);
+        GST_INFO("Input file length is %lu", app->h_param.length);
     }
 
     /* Get input resolution */
-    ret = pcie_get_input_resolution (app->fd, &app->h_param.input_res);
+    ret = pcie_get_input_resolution(app->fd, &app->h_param.input_res);
     if (ret < 0) {
         GST_ERROR ("Failed to get input resolution");
+        return PCIE_GST_APP_FAIL;
+    }
+    if (app->h_param.input_res.width == 0 || app->h_param.input_res.height == 0) {
+        GST_ERROR ("Invalid resolution %ux%u from host (register not yet written?)",
+                   app->h_param.input_res.width, app->h_param.input_res.height);
         return PCIE_GST_APP_FAIL;
     }
     GST_INFO("Resolution is %d x %d", app->h_param.input_res.width,
@@ -207,71 +227,50 @@ static gint set_host_parameters(App *app)
         GST_ERROR ("Failed to get fps");
         return PCIE_GST_APP_FAIL;
     }
-    GST_INFO("FPS is %d",app->h_param.fps);
+    if (app->h_param.fps == 0) {
+        GST_WARNING ("FPS from host is 0 — defaulting to 30");
+        app->h_param.fps = 30;
+    }
+    GST_INFO("FPS is %d", app->h_param.fps);
 
-    /* Get filter-preset */
-    if (app->h_param.usecase != VGST_USECASE_TYPE_APPSRC_TO_HOST_BYPASS &&
-    	app->h_param.usecase != VGST_USECASE_TYPE_APPSRC_TO_KMSSINK_BYPASS &&
-    	app->h_param.usecase != VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS &&
-	app->h_param.usecase != VGST_USECASE_TYPE_APPSRC_DPU_TO_KMSSINK &&
-	app->h_param.usecase != VGST_USECASE_TYPE_MIPISRC_DPU_TO_HOST) {
-        ret = pcie_get_filter_type (app->fd, &(app->h_param.filter_preset));
-        if (ret < 0) {
-            GST_ERROR ("Failed to get filter type");
-            return PCIE_GST_APP_FAIL;
-        }
-        if (app->h_param.filter_preset >= VGST_FILTER_PRESET_MAX) {
-            GST_ERROR ("Provided filter preset is not supported");
-            return PCIE_GST_APP_FAIL;
-        }
-        GST_INFO("PCIe Filter Preset is %d",app->h_param.filter_preset);
+    /* Get format type from host via PCIRC_FORMAT_SET register.
+     * Values: VGST_FORMAT_YUY2=1, VGST_FORMAT_NV12=2, VGST_FORMAT_RGB=3.
+     * Default to NV12 if register read fails or returns 0. */
+    {
+        guint fmt_val = 0;
+        ret = pcie_get_format(app->fd, &fmt_val);
+        if (ret < 0 || fmt_val == 0 || fmt_val >= VGST_FORMAT_MAX)
+            fmt_val = VGST_FORMAT_NV12;
+        app->h_param.input_format = fmt_val;
+        GST_INFO("Video format from host: %u (%s)", fmt_val,
+                 (fmt_val == VGST_FORMAT_YUY2) ? "YUY2"   :
+                 (fmt_val == VGST_FORMAT_RGB)  ? "RGB888" : "NV12");
     }
 
-    /* Get format type */
-    /* NOTE: Only YUY2 format is supported currently */
-    app->h_param.input_format = VGST_FORMAT_YUY2;
-    if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_DPU_TO_KMSSINK) {
-    	app->h_param.input_format = VGST_FORMAT_BGR;
-	    app->yuv_frame_size = app->h_param.input_res.width *  \
-                          app->h_param.input_res.height * BGR_MULTIPLIER;
+    /* Compute per-frame byte size based on format */
+    if (app->h_param.input_format == VGST_FORMAT_YUY2) {
+        app->yuv_frame_size = app->h_param.input_res.width *
+                              app->h_param.input_res.height * YUY2_MULTIPLIER;
+    } else if (app->h_param.input_format == VGST_FORMAT_RGB) {
+        app->yuv_frame_size = app->h_param.input_res.width *
+                              app->h_param.input_res.height * RGB888_MULTIPLIER;
     } else {
-    	app->yuv_frame_size = app->h_param.input_res.width *  \
-                          app->h_param.input_res.height * YUY2_MULTIPLIER;
+        /* NV12 (default) */
+        app->yuv_frame_size = app->h_param.input_res.width *
+                              app->h_param.input_res.height * NV12_MULTIPLIER;
     }
+    GST_INFO("Frame size is %lu bytes", app->yuv_frame_size);
 
-    GST_INFO("YUV Frame size is %lu",app->yuv_frame_size);
-
-    /* Get Kernel mode */
-    ret = pcie_get_kernel_mode(app->fd, &(app->h_param.kernel_mode));
-    if (ret < 0) {
-        GST_ERROR ("Failed to get kernel mode");
-        return PCIE_GST_APP_FAIL;
-    }
-    if (app->h_param.kernel_mode >= VGST_FILTER_MODE_MAX) {
-        GST_ERROR ("Provided kernel mode is not supported");
-        return PCIE_GST_APP_FAIL;
-    }
-    GST_INFO("Kernel mode is %d",app->h_param.kernel_mode);
-
-    Set_config_info(app->h_param.input_res.width,
-		    app->h_param.input_res.height,
-		    aitask);
+    /* Always-visible summary */
+    g_print("[pcie_gst_app] Host config: %ux%u @ %u fps | Format: %s | UC%u\n",
+            app->h_param.input_res.width,
+            app->h_param.input_res.height,
+            app->h_param.fps,
+            (app->h_param.input_format == VGST_FORMAT_YUY2) ? "YUY2"   :
+            (app->h_param.input_format == VGST_FORMAT_RGB)  ? "RGB888" : "NV12",
+            (app->h_param.usecase == VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS) ? 1u : 2u);
 
     return ret;
-}
-
-static char * getfilterstring(int index,char *strbuf) {
-   const char *str1 = "{\"filter_preset\":\"";
-   const char *str2 = "{\"filter_preset\" : \"";
-   if(index > 1){
-   strbuf = (char *)malloc(strlen(str1) + strlen(filter_presets[index])+1);
-   sprintf(strbuf, "%s%s\"\}", str1, filter_presets[index] );
-   }
-   else {
-   strbuf = (char *)malloc(strlen(str2) + strlen(filter_presets[index])+1);
-   sprintf(strbuf, "%s%s\"\}", str2, filter_presets[index] );
-   }
-   return strbuf;
 }
 
 static gint gst_set_elements (App *app)
@@ -283,18 +282,9 @@ static gint gst_set_elements (App *app)
     app->capsfilter     = gst_element_factory_make  ("capsfilter",      NULL);
     app->pciesrc        = gst_element_factory_make  ("appsrc",          NULL);
     app->pciesink       = gst_element_factory_make  ("appsink",         NULL);
-#ifdef PCIE_FILESINK
-    app->hdmisink       = gst_element_factory_make  ("filesink",         NULL);
-#else
-    app->hdmisink       = gst_element_factory_make  ("kmssink",         NULL);
-#endif
-    //app->vvas_xfilter    = gst_element_factory_make  ("vvas_xfilter",     NULL);
     app->perf           = gst_element_factory_make  ("perf",            NULL);
-    if (!app->pipeline || !app->inputsrc  || !app->capsfilter  || \
-        !app->pciesrc  || !app->pciesink  || \
-        //!app->vvas_xfilter ||
-        !app->hdmisink || \
-        !app->perf) {
+    if (!app->pipeline || !app->inputsrc  || !app->capsfilter  ||
+        !app->pciesrc  || !app->pciesink  || !app->perf) {
       GST_ERROR ("Failed to create required GStreamer elements");
       return PCIE_GST_APP_FAIL;
     }
@@ -310,8 +300,6 @@ static void gst_reset_elements (App *app)
     gst_object_unref (GST_OBJECT (app->capsfilter));
     gst_object_unref (GST_OBJECT (app->pciesrc));
     gst_object_unref (GST_OBJECT (app->pciesink));
-    gst_object_unref (GST_OBJECT (app->hdmisink));
-    //gst_object_unref (GST_OBJECT (app->vvas_xfilter));
     gst_object_unref (GST_OBJECT (app->perf));
     GST_INFO("Released GStreamer elements");
 }
@@ -319,249 +307,87 @@ static void gst_reset_elements (App *app)
 static void set_property (App *app)
 {
     GstCaps* srcCaps = NULL;
-    char * preset,*strbuf;
-    if (app->h_param.usecase >= VGST_USECASE_TYPE_APPSRC_TO_HOST) {
+    const char *fmt_str;
+
+    /* Pick GStreamer format string from the host-selected format */
+    fmt_str = (app->h_param.input_format == VGST_FORMAT_YUY2) ? VIDEOPARSE_FORMAT_YUY2
+            : (app->h_param.input_format == VGST_FORMAT_RGB)  ? VIDEOPARSE_FORMAT_RGB
+            :                                                    VIDEOPARSE_FORMAT_NV12;
+
+    if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_TO_HOST_BYPASS) {
+        /* UC2: appsrc — file from host */
         GST_INFO("Setting up appsrc plugin");
-        g_object_set (G_OBJECT (app->pciesrc),                      \
-                "stream-type", GST_APP_STREAM_TYPE_STREAM,          \
-                "format",      GST_FORMAT_TIME,                     \
-                "is-live",     TRUE,                                \
-                "block",       TRUE,                                \
-                "max-bytes",   app->yuv_frame_size,                 \
+        g_object_set (G_OBJECT (app->pciesrc),
+                "stream-type", GST_APP_STREAM_TYPE_STREAM,
+                "format",      GST_FORMAT_TIME,
+                "is-live",     FALSE,
+                "block",       TRUE,
+                "max-bytes",   app->yuv_frame_size,
                 NULL);
         srcCaps = gst_caps_new_simple ("video/x-raw",
-                "format",     G_TYPE_STRING,                        \
-                              app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_DPU_TO_KMSSINK ? "BGR" : VIDEOPARSE_FORMAT_YUY2,  \
-                "width",      G_TYPE_INT,                           \
-                              app->h_param.input_res.width,         \
-                "height",     G_TYPE_INT,                           \
-                              app->h_param.input_res.height,        \
-                "framerate",  GST_TYPE_FRACTION,                    \
-                              app->h_param.fps,                     \
-                              MAX_FRAME_RATE_DENOM, NULL);
+                "format",     G_TYPE_STRING,  fmt_str,
+                "width",      G_TYPE_INT,     app->h_param.input_res.width,
+                "height",     G_TYPE_INT,     app->h_param.input_res.height,
+                "framerate",  GST_TYPE_FRACTION,
+                              app->h_param.fps, MAX_FRAME_RATE_DENOM, NULL);
         GST_INFO("New Caps for appsrc %" GST_PTR_FORMAT, srcCaps);
         g_object_set (G_OBJECT (app->pciesrc),  "caps",  srcCaps, NULL);
         gst_caps_unref (srcCaps);
-    }
-    else if (app->h_param.usecase <= VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS) {
+    } else {
+        /* UC1: v4l2src — MIPI camera */
         GST_INFO("Setting up v4l2src plugin");
-        g_object_set (G_OBJECT(app->inputsrc),                      \
-                "io-mode",   VGST_V4L2_IO_MODE_DMABUF_EXPORT,       \
-                "device",    INPUT_SRC,                             \
+        g_object_set (G_OBJECT(app->inputsrc),
+                "io-mode",   VGST_V4L2_IO_MODE_DMABUF_EXPORT,
+                "device",    INPUT_SRC,
                 NULL);
-        srcCaps  = gst_caps_new_simple ("video/x-raw",              \
-                "width",     G_TYPE_INT,                            \
-                             app->h_param.input_res.width,          \
-                "height",    G_TYPE_INT,                            \
-                             app->h_param.input_res.height,         \
-                "format",    G_TYPE_STRING,                         \
-                             (app->h_param.usecase == VGST_USECASE_TYPE_MIPISRC_DPU_TO_HOST)? "BGR" : VIDEOPARSE_FORMAT_YUY2,                \
-                "framerate", GST_TYPE_FRACTION,                     \
-                             app->h_param.fps,                      \
-                             MAX_FRAME_RATE_DENOM,                  \
+        srcCaps = gst_caps_new_simple ("video/x-raw",
+                "width",     G_TYPE_INT,     app->h_param.input_res.width,
+                "height",    G_TYPE_INT,     app->h_param.input_res.height,
+                "format",    G_TYPE_STRING,  fmt_str,
+                "framerate", GST_TYPE_FRACTION,
+                             app->h_param.fps, MAX_FRAME_RATE_DENOM,
                 NULL);
         GST_INFO("New Caps for capsfilter %" GST_PTR_FORMAT, srcCaps);
         g_object_set (G_OBJECT (app->capsfilter),  "caps",  srcCaps, NULL);
         gst_caps_unref (srcCaps);
     }
 
-    if (app->h_param.usecase < VGST_USECASE_TYPE_APPSRC_TO_KMSSINK) {
-    	/* Configure appsink */
-    	g_object_set (G_OBJECT (app->pciesink), \
-            	"emit-signals", TRUE,           \
-            	"sync",         FALSE,          \
-            	"async",        FALSE,          \
-            	NULL);
-    }
-    else if(app->h_param.usecase >= VGST_USECASE_TYPE_APPSRC_TO_KMSSINK) {
-    	/* Configure kmssink */
-#ifdef PCIE_FILESINK
-        g_object_set (G_OBJECT (app->hdmisink), "location", "./pci_dump.raw", NULL);
-#else
-	    g_object_set (G_OBJECT (app->hdmisink), \
-            	"bus-id",   KMSSINK_BUS_ID,           \
-            	"plane-id", KMSSINK_PLAN_ID , \
-            	"sync",        FALSE,          \
-            	NULL);
-#endif
-    }
-    if(app->h_param.usecase != VGST_USECASE_TYPE_APPSRC_TO_HOST_BYPASS &&
-       app->h_param.usecase != VGST_USECASE_TYPE_APPSRC_TO_KMSSINK_BYPASS &&
-       app->h_param.usecase != VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS &&
-       app->h_param.usecase != VGST_USECASE_TYPE_APPSRC_DPU_TO_KMSSINK &&
-       app->h_param.usecase != VGST_USECASE_TYPE_MIPISRC_DPU_TO_HOST) {
-        /* Configure vvas_xfilter parameters */
-        GST_INFO("Setting up filter2d plugin");
-        g_object_set (G_OBJECT (app->vvas_xfilter),              \
-                "kernels-config", "/usr/share/vvas/vck190-pcie-trd/kernel_xfilter2d_pl.json",   \
-                NULL);
-	preset = getfilterstring(app->h_param.filter_preset,strbuf);
-	g_object_set (G_OBJECT (app->vvas_xfilter),              \
-                "dynamic-config",preset,   \
-                NULL);
-    }
-    free(strbuf);
-    strbuf = NULL;
-    preset = NULL;
+    /* Configure appsink.
+     * UC1 (MIPI live): sync=FALSE — live source, never block on clock.
+     * UC2 (file):      sync=TRUE  — clock paces C2H DMA at exactly fps. */
+    g_object_set (G_OBJECT (app->pciesink),
+            "emit-signals", TRUE,
+            "sync",  (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_TO_HOST_BYPASS),
+            "async",        FALSE,
+            NULL);
 }
 
 static gint create_pipeline (App *app)
 {
     gint ret = 0;
 
-    if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_DPU_TO_KMSSINK) {
-        /* pciesrc -> dpu -> hdmisink -> displayonmonitor */
-        GError *err = NULL;
-        char* pipestr = Get_pipeline_str(app->h_param.usecase);
-
-        app->dpubin = gst_parse_bin_from_description (pipestr, TRUE, &err);
-        gst_bin_add_many (GST_BIN (app->pipeline), app->pciesrc, app->perf, app->dpubin, app->hdmisink, NULL);
-        if (gst_element_link_many (app->pciesrc, app->dpubin, app->perf, app->hdmisink, NULL) != TRUE) {
-            GST_ERROR ("Error linking pciesrc --> perf --> dpu --> "                \
-                       "hdmisink pipeline");
-            ret = PCIE_GST_APP_FAIL;
-        } else {
-            GST_INFO("Linked pciesrc --> perf --> dpu --> hdmisink "              \
-                       "pipeline successfully");
-        }
-    }
-    else if (app->h_param.usecase == VGST_USECASE_TYPE_MIPISRC_DPU_TO_HOST) {
-        GError *err = NULL;
-        char* pipestr = Get_pipeline_str(app->h_param.usecase);
-        app->dpubin = gst_parse_bin_from_description (pipestr, TRUE, &err);
-
-	gst_bin_add_many (GST_BIN (app->pipeline), app->inputsrc,       \
-	        app->capsfilter, app->dpubin, app->perf, app->pciesink, \
-	        NULL);
-	if (gst_element_link_many (app->inputsrc, app->capsfilter, app->dpubin,  app->perf, app->pciesink \
-	        , NULL) != TRUE) {
-	   GST_ERROR ("Error linking v4l2src --> capsfilter --> dpu"      \
-	   	    " --> perf --> pciesink pipeline");
-	   ret = PCIE_GST_APP_FAIL;
-	} else{
-	    GST_INFO("Linked v4l2src --> capsfilter --> dpu" \
-	            " --> perf --> pciesink successfully");
-	}
-
-    }
-    else if (app->h_param.usecase == VGST_USECASE_TYPE_MIPISRC_TO_HOST) {
-        /* mipi -> filter2d -> pciesink -> displayonhost */
-        gst_bin_add_many (GST_BIN (app->pipeline), app->inputsrc,       \
-                app->capsfilter, app->vvas_xfilter, app->perf,           \
-                app->pciesink, NULL);
-        if (gst_element_link_many (app->inputsrc, app->capsfilter,      \
-                app->vvas_xfilter, app->perf, app->pciesink, NULL)       \
-                != TRUE) {
-            GST_ERROR ("Error linking v4l2src --> capsfilter --> "      \
-                       "vvas_xfilter --> perf --> pciesink pipeline");
-            ret = PCIE_GST_APP_FAIL;
-        } else{
-            GST_INFO("Linked v4l2src --> capsfilter --> vvas_xfilter"  \
-                       " --> perf --> pciesink successfully");
-        }
-    }
-    else if (app->h_param.usecase == VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS) {
-	gst_bin_add_many (GST_BIN (app->pipeline), app->inputsrc,       \
-	        app->capsfilter, app->perf,app->pciesink, 		\
-	        NULL);
-	if (gst_element_link_many (app->inputsrc, app->capsfilter, app->perf, \
-	        app->pciesink, NULL) != TRUE) {
-	   GST_ERROR ("Error linking v4l2src --> capsfilter --> "      \
-	   	    " --> perf --> pciesink pipeline");
-	   ret = PCIE_GST_APP_FAIL;
-	} else{
-	    GST_INFO("Linked v4l2src --> capsfilter --> " \
-	            " --> perf --> pciesink successfully");
-		}
-	}
-    else if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_TO_HOST) {
-        /* pciesrc -> filter2d -> pciesink -> displayonhost */
-        gst_bin_add_many (GST_BIN (app->pipeline), app->pciesrc,        \
-                app->vvas_xfilter, app->perf, app->pciesink, NULL);
-        if (gst_element_link_many (app->pciesrc, app->vvas_xfilter,      \
+    if (app->h_param.usecase == VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS) {
+        /* UC1: v4l2src → capsfilter → perf → pciesink (appsink) → host display */
+        gst_bin_add_many (GST_BIN (app->pipeline), app->inputsrc,
+                app->capsfilter, app->perf, app->pciesink, NULL);
+        if (gst_element_link_many (app->inputsrc, app->capsfilter,
                 app->perf, app->pciesink, NULL) != TRUE) {
-            GST_ERROR ("Error linking pciesrc --> vvas_xfilter --> "     \
-                       "perf --> pciesink pipeline");
+            GST_ERROR ("Error linking v4l2src → capsfilter → perf → pciesink");
             ret = PCIE_GST_APP_FAIL;
         } else {
-            GST_INFO("Linked pciesrc --> vvas_xfilter --> perf --> "   \
-                       "pciesink pipeline successfully");
+            GST_INFO("Linked v4l2src → capsfilter → perf → pciesink");
         }
     }
     else if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_TO_HOST_BYPASS) {
-        /* pciesrc -> pciesink -> displayonhost */
-        gst_bin_add_many (GST_BIN (app->pipeline), app->pciesrc,            \
+        /* UC2: pciesrc (appsrc) → perf → pciesink (appsink) → host display */
+        gst_bin_add_many (GST_BIN (app->pipeline), app->pciesrc,
                 app->perf, app->pciesink, NULL);
-        if (gst_element_link_many (app->pciesrc, app->perf,                 \
+        if (gst_element_link_many (app->pciesrc, app->perf,
                 app->pciesink, NULL) != TRUE) {
-            GST_ERROR ("Error linking pciesrc --> perf --> "                \
-                       "pciesink pipeline");
+            GST_ERROR ("Error linking pciesrc → perf → pciesink");
             ret = PCIE_GST_APP_FAIL;
         } else {
-            GST_INFO("Linked pciesrc --> perf --> pciesink "              \
-                       "pipeline successfully");
-        }
-     }
-     else if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_TO_KMSSINK) {
-        /* pciesrc -> hdmisink -> filter2d -> displayonmonitor */
-        gst_bin_add_many (GST_BIN (app->pipeline), app->pciesrc,            \
-                app->vvas_xfilter, app->perf, app->hdmisink, NULL);
-        if (gst_element_link_many (app->pciesrc, app->perf,                 \
-                app->vvas_xfilter, app->hdmisink, NULL) != TRUE) {
-            GST_ERROR ("Error linking pciesrc --> perf --> "                \
-                       "hdmisink pipeline");
-            ret = PCIE_GST_APP_FAIL;
-        } else {
-            GST_INFO("Linked pciesrc --> vvas_xfilter -->perf  --> hdmisink "              \
-                       "pipeline successfully");
-        }
-     }
-     else if (app->h_param.usecase >= VGST_USECASE_TYPE_APPSRC_TO_KMSSINK_BYPASS) {
-        /* pciesrc -> hdmisink -> displayonmonitor */
-        gst_bin_add_many (GST_BIN (app->pipeline), app->pciesrc,            \
-                app->perf, app->hdmisink, NULL);
-        if (gst_element_link_many (app->pciesrc, app->perf,                 \
-                app->hdmisink, NULL) != TRUE) {
-            GST_ERROR ("Error linking pciesrc --> perf --> "                \
-                       "hdmisink pipeline");
-            ret = PCIE_GST_APP_FAIL;
-        } else {
-            GST_INFO("Linked pciesrc --> perf --> hdmisink "              \
-                       "pipeline successfully");
-        }
-    }
-    else if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_DPU_TO_KMSSINK) {
-        /* pciesrc -> hdmisink -> displayonmonitor */
-        GError *err = NULL;
-        char* pipestr = Get_pipeline_str(app->h_param.usecase);
-        app->dpubin = gst_parse_bin_from_description (pipestr, TRUE, &err);
-        gst_bin_add_many (GST_BIN (app->pipeline), app->pciesrc, app->dpubin, NULL);
-        if (gst_element_link_many (app->pciesrc, app->dpubin, NULL) != TRUE) {
-            GST_ERROR ("Error linking pciesrc --> perf --> "                \
-                       "hdmisink pipeline");
-            ret = PCIE_GST_APP_FAIL;
-        } else {
-            GST_INFO("Linked pciesrc --> perf --> hdmisink "              \
-                       "pipeline successfully");
-        }
-    }
-    else if (app->h_param.usecase == VGST_USECASE_TYPE_MIPISRC_DPU_TO_HOST) {
-        /* pciesrc -> hdmisink -> displayonmonitor */
-        GError *err = NULL;
-        char* pipestr = Get_pipeline_str(app->h_param.usecase);
-        app->dpubin = gst_parse_bin_from_description (pipestr, TRUE, &err);
-
-        gst_bin_add_many (GST_BIN (app->pipeline), app->inputsrc,
-                app->capsfilter, app->dpubin,app->pciesink,
-                NULL);
-        if (gst_element_link_many (app->inputsrc,
-                app->capsfilter, app->dpubin, app->pciesink, NULL) != TRUE) {
-            GST_ERROR ("Error linking inputsrc --> dpu --> "                \
-                       "host pipeline");
-            ret = PCIE_GST_APP_FAIL;
-        } else {
-            GST_INFO("Linked inputsrc --> dpu --> host "              \
-                       "pipeline successfully");
+            GST_INFO("Linked pciesrc → perf → pciesink");
         }
     }
     return ret;
@@ -572,113 +398,41 @@ static void destroy_pipeline (App *app)
     gst_object_ref (app->pipeline);
     gst_object_ref (app->perf);
 
-    if (app->h_param.usecase == VGST_USECASE_TYPE_MIPISRC_TO_HOST) {
-        /* mipi -> filter2d -> pciesink -> displayonhost */
-        gst_element_unlink_many (app->inputsrc, app->capsfilter,            \
-                app->vvas_xfilter, app->perf, app->pciesink, NULL);
-        gst_object_ref (app->inputsrc);
-        gst_object_ref (app->capsfilter);
-        gst_object_ref (app->vvas_xfilter);
-        gst_object_ref (app->pciesink);
-        gst_bin_remove_many (GST_BIN (app->pipeline), app->inputsrc,        \
-                app->capsfilter, app->vvas_xfilter, app->perf,               \
-                app->pciesink, NULL);
-        GST_INFO("Destroyed v4l2src --> capsfilter --> vvas_xfilter"       \
-                   " --> perf --> pciesink successfully");
-    }
-    else if (app->h_param.usecase == VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS) {
-        /* mipi -> filter2d -> pciesink -> displayonhost */
-        gst_element_unlink_many (app->inputsrc, app->capsfilter,            \
-                 app->perf, app->pciesink, NULL);
-        gst_object_ref (app->inputsrc);
-        gst_object_ref (app->capsfilter);
-        gst_object_ref (app->pciesink);
-        gst_bin_remove_many (GST_BIN (app->pipeline), app->inputsrc,        \
-                app->capsfilter, app->perf,app->pciesink, NULL);
-        GST_INFO("Destroyed v4l2src --> capsfilter --> \
-                    --> perf --> pciesink successfully");
-    }
-    else if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_TO_HOST) {
-        /* pciesrc -> filter2d -> pciesink -> displayonhost */
-        gst_element_unlink_many (app->pciesrc, app->vvas_xfilter,            \
+    if (app->h_param.usecase == VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS) {
+        gst_element_unlink_many (app->inputsrc, app->capsfilter,
                 app->perf, app->pciesink, NULL);
-        gst_object_ref (app->pciesrc);
-        gst_object_ref (app->vvas_xfilter);
+        gst_object_ref (app->inputsrc);
+        gst_object_ref (app->capsfilter);
         gst_object_ref (app->pciesink);
-        gst_bin_remove_many (GST_BIN (app->pipeline), app->pciesrc,         \
-                app->vvas_xfilter, app->perf, app->pciesink, NULL);
-        GST_INFO("Destroyed pciesrc --> vvas_xfilter --> perf --> "        \
-                   "pciesink pipeline successfully");
+        gst_bin_remove_many (GST_BIN (app->pipeline), app->inputsrc,
+                app->capsfilter, app->perf, app->pciesink, NULL);
+        GST_INFO("Destroyed v4l2src → capsfilter → perf → pciesink");
     }
     else if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_TO_HOST_BYPASS) {
-        /* pciesrc -> pciesink -> displayonhost */
         gst_element_unlink_many (app->pciesrc, app->perf, app->pciesink, NULL);
         gst_object_ref (app->pciesrc);
         gst_object_ref (app->pciesink);
-        gst_bin_remove_many (GST_BIN (app->pipeline), app->pciesrc,         \
+        gst_bin_remove_many (GST_BIN (app->pipeline), app->pciesrc,
                 app->perf, app->pciesink, NULL);
-        GST_INFO("Destroyed pciesrc --> perf --> pciesink "               \
-                   "pipeline successfully");
-     }
-    else if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_TO_KMSSINK) {
-        /* pciesrc -> hdmisink -> displayonmonitor */
-        gst_element_unlink_many (app->pciesrc, app->perf, app->vvas_xfilter, \
-	app->hdmisink, NULL);
-        gst_object_ref (app->pciesrc);
-        gst_object_ref (app->vvas_xfilter);
-        gst_object_ref (app->hdmisink);
-        gst_bin_remove_many (GST_BIN (app->pipeline), app->pciesrc,app->vvas_xfilter,\
-                app->perf, app->hdmisink, NULL);
-        GST_INFO("Destroyed pciesrc --> vvas_xfilter --> perf --> hdmisink "               \
-                   "pipeline successfully");
-		   }
-    else if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_TO_KMSSINK_BYPASS) {
-        /* pciesrc -> hdmisink -> displayonmonitor */
-        gst_element_unlink_many (app->pciesrc, app->perf, app->hdmisink, NULL);
-        gst_object_ref (app->pciesrc);
-        gst_object_ref (app->hdmisink);
-        gst_bin_remove_many (GST_BIN (app->pipeline), app->pciesrc,         \
-                app->perf, app->hdmisink, NULL);
-        GST_INFO("Destroyed pciesrc --> perf --> hdmisink "               \
-                   "pipeline successfully");
-		   }
-    else if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_DPU_TO_KMSSINK) {
-        /* pciesrc -> hdmisink -> displayonmonitor */
-        gst_element_unlink_many (app->pciesrc, app->perf, app->hdmisink, NULL);
-        gst_object_ref (app->pciesrc);
-        gst_object_ref (app->hdmisink);
-        gst_bin_remove_many (GST_BIN (app->pipeline), app->pciesrc,         \
-                app->perf, app->hdmisink, NULL);
-        GST_INFO("Destroyed pciesrc --> perf --> hdmisink "               \
-                   "pipeline successfully");
-		   }
-    else if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_TO_KMSSINK_BYPASS) {
-        /* pciesrc -> hdmisink -> displayonmonitor */
-        gst_element_unlink_many (app->pciesrc, app->perf, app->hdmisink, NULL);
-        gst_object_ref (app->pciesrc);
-        gst_object_ref (app->hdmisink);
-        gst_bin_remove_many (GST_BIN (app->pipeline), app->pciesrc,         \
-                app->perf, app->hdmisink, NULL);
-        GST_INFO("Destroyed pciesrc --> perf --> hdmisink "               \
-                   "pipeline successfully");
-		   }
-
+        GST_INFO("Destroyed pciesrc → perf → pciesink");
+    }
 }
 
 static gpointer host_app_reg_read (gpointer data)
 {
     gint       ret            = 0;
     guint      stop_mipi_feed = 0;
-    GstEvent*  event          = NULL;
     App*       app            = (App*) data;
 
     GST_INFO("starting hostapp register read thread");
 
     while(!app->exit_thread) {
 
-        /* Check for stop mipi feed signal only when mipi use-case is running */
-        if ((app->loop) &&
-            (app->h_param.usecase <= VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS)) {
+        /* Check for stop signal for ALL use cases — not only MIPI.
+         * When the host sends PCIEP_SET_SIG=1 (q+Enter for UC1 or
+         * end-of-transfer for UC2), send EOS to the GStreamer pipeline
+         * so the EP application exits cleanly without user intervention. */
+        if (app->loop) {
 
             stop_mipi_feed = 0;
             ret = pcie_read_stop_mipi_feed (app->fd, &stop_mipi_feed);
@@ -687,25 +441,38 @@ static gpointer host_app_reg_read (gpointer data)
             }
 
             if (stop_mipi_feed) {
-                GST_INFO("Stop mipi feed signal received");
-                if (app->loop && g_main_loop_is_running (app->loop)) {
-                    GST_INFO("Quitting the playback");
-                    event = gst_event_new_eos();
-                    if (event) {
-                        if (gst_element_send_event (app->pipeline, event)) {
-                            GST_INFO("Sent EOS event to quit mipi pipeline");
-                        } else {
-                            gst_event_unref (event);
-                            GST_ERROR ("Failed to send EOS event to quit mipi "
-                                       "pipeline");
-                        }
-                    }
+                g_print("[pcie_gst_app] Stop signal from host — closing ISP pipeline gracefully\n");
+                /* Mark thread for exit so the polling loop stops */
+                app->exit_thread = TRUE;
+
+                /* Call g_main_loop_quit() directly — this is the exact equivalent
+                 * of the user pressing Ctrl+C on the terminal:
+                 *
+                 *   Ctrl+C → SIGINT → GLib signal handler → g_main_loop_quit()
+                 *   Host stop signal → host_app_reg_read → g_main_loop_quit()
+                 *
+                 * Both paths cause g_main_loop_run() in main() to return, which
+                 * then runs:
+                 *   gst_element_set_state(pipeline, GST_STATE_NULL)
+                 *     → v4l2src stops acquiring frames
+                 *     → camera / ISP resources freed
+                 *     → RPU mailbox communication terminated cleanly
+                 *   pcie_dma_export_release()  (UC2: DMA pool freed)
+                 *   read_write_transfer_done()  (host notified)
+                 *
+                 * Note: sending EOS to a live pipeline (v4l2src) does NOT work
+                 * because v4l2src never generates a natural EOS — the pipeline
+                 * hangs waiting for it and the ISP is never properly freed. */
+                if (app->loop && g_main_loop_is_running(app->loop)) {
+                    GST_INFO("[pcie_main] Calling g_main_loop_quit (usecase=%d)",
+                             app->h_param.usecase);
+                    g_main_loop_quit(app->loop);
                 }
             }
         }
 
-        /* Move to IDLE mode until timeout */
-        sleep (HOST_APP_REG_READ_TIMEOUT);
+        /* Poll stop-mipi-feed signal every HOST_APP_REG_READ_TIMEOUT_US (50 ms) */
+        usleep(HOST_APP_REG_READ_TIMEOUT_US);
     }
 
     GST_DEBUG("Exit thread is set, quitting hostapp register read thread");
@@ -713,16 +480,8 @@ static gpointer host_app_reg_read (gpointer data)
     return NULL;
 }
 
-static GOptionEntry entries[] =
-{
-    { "aitask", 'a', 0, G_OPTION_ARG_STRING, &aitask, "select AI task to be run: [facedetect|ssd|refinedet]" },
-    { NULL }
-};
-
 gint main (gint argc, gchar *argv[])
 {
-    GOptionContext *optctx;
-    GError *error = NULL;
     App*        app         = &s_app;
     GstBus*     bus         = NULL;
     GstPad*     pad         = NULL;
@@ -735,19 +494,17 @@ gint main (gint argc, gchar *argv[])
     memset (app, 0, sizeof(App));
 
     gst_init (&argc, &argv);
-    setenv("VVAS_CORE_CFG_PATH", "/usr/share/vvas/pcie-gst-app/image_processing.cfg", 1);
 
-    optctx = g_option_context_new ("- Application for facedetion detction on SoM board of Xilinx.");
-    g_option_context_add_main_entries (optctx, entries, NULL);
-    g_option_context_add_group (optctx, gst_init_get_option_group ());
-    if (!g_option_context_parse (optctx, &argc, &argv, &error)) {
-        g_printerr ("Error parsing options: %s\n", error->message);
-        g_option_context_free (optctx);
-        g_clear_error (&error);
-        return -1;
+    /* Install SIGINT/SIGTERM handler so Ctrl+C quits the GMainLoop instead
+     * of killing the process. */
+    {
+        struct sigaction sa;
+        sa.sa_handler = sigint_quit_handler;
+        sa.sa_flags   = SA_RESETHAND;   /* second Ctrl+C = hard kill */
+        sigemptyset(&sa.sa_mask);
+        sigaction(SIGINT,  &sa, NULL);
+        sigaction(SIGTERM, &sa, NULL);
     }
-    g_option_context_free (optctx);
-
 
     GST_DEBUG_CATEGORY_INIT(pcie_gst_app_debug, "pcie_gst_app", 0,
             "PCIe endpoint device GStreamer application");
@@ -763,35 +520,45 @@ gint main (gint argc, gchar *argv[])
                            &host_app_reg_read,
                            app);
 
-    /* Setting up the gst elements*/
+    /* Verify the app and the driver agree on the EP DMA buffer pool depth. */
+    {
+        gint drv_bufs = pcie_num_dma_buf(app->fd);
+
+        if (drv_bufs < MAX_BUFFER_POOL_SIZE) {
+            g_printerr ("FATAL: driver exports %d DMA buffers but this app "
+                        "needs %d.\n"
+                        "       Align NUM_BUFFERS in xilinx_pci_endpoint.c "
+                        "with MAX_BUFFER_POOL_SIZE in pcie_abstract.h.\n",
+                        drv_bufs, MAX_BUFFER_POOL_SIZE);
+            goto PCIE_DEV_CLOSE;
+        }
+        if (drv_bufs != MAX_BUFFER_POOL_SIZE)
+            GST_WARNING ("Driver exports %d DMA buffers, app uses %d; "
+                         "the remaining %d are unused reserved memory.",
+                         drv_bufs, MAX_BUFFER_POOL_SIZE,
+                         drv_bufs - MAX_BUFFER_POOL_SIZE);
+        else
+            GST_INFO ("EP DMA buffer pool depth = %d (app and driver agree)",
+                      MAX_BUFFER_POOL_SIZE);
+    }
+
+    /* Setting up the gst elements */
     ret = gst_set_elements(app);
-    if (ret <   0) {
+    if (ret < 0) {
         g_printerr ("Failed to set the gst elements\n");
         goto PCIE_DEV_CLOSE;
     }
 
-    /* Setting up the host parametes */
+    /* Read host-configured parameters (usecase, resolution, fps, format) */
     ret = set_host_parameters(app);
     if (ret < 0) {
         g_printerr ("Failed to set the host parameters\n");
         goto GST_RESET_ELEMENTS;
     }
-/*
-    //app->h_param.usecase = VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS;
-    app->h_param.usecase = VGST_USECASE_TYPE_APPSRC_TO_HOST_BYPASS;
-    app->h_param.input_res.width = 1920;
-    app->h_param.input_res.height = 1080;
-    app->h_param.fps = 30;
-    app->h_param.input_format = VGST_FORMAT_YUY2;
-    app->yuv_frame_size = app->h_param.input_res.width *  \
-                          app->h_param.input_res.height * YUY2_MULTIPLIER;
-    app->h_param.length = 31104000;*/
 
-    GST_INFO ("Usecase type is %d",app->h_param.usecase);
-    GST_INFO ("Usecase type is %d",app->h_param.usecase);
-    GST_INFO ("FPS is %d",app->h_param.fps);
+    GST_INFO ("Usecase=%d  FPS=%d", app->h_param.usecase, app->h_param.fps);
 
-    /* Set Gstreamer elements properties for pipeline */
+    /* Set GStreamer element properties for pipeline */
     set_property (app);
 
     /* Create GStreamer pipeline */
@@ -806,32 +573,23 @@ gint main (gint argc, gchar *argv[])
 
     bus = gst_pipeline_get_bus (GST_PIPELINE (app->pipeline));
 
-    if (app->h_param.usecase > VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS ) {
-        /* Register required callbacks */
-        hid_need   = g_signal_connect(app->pciesrc,             \
-                "need-data",                                    \
-                G_CALLBACK(start_feed),                         \
-                app);
-        hid_enough = g_signal_connect(app->pciesrc,             \
-                "enough-data",                                  \
-                G_CALLBACK(stop_feed),                          \
-                app);
-        GST_INFO ("start_feed() calback registerd for usecase > VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS\n");
+    /* UC2 (appsrc): register need-data / enough-data callbacks */
+    if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_TO_HOST_BYPASS) {
+        hid_need   = g_signal_connect(app->pciesrc,
+                "need-data",   G_CALLBACK(start_feed), app);
+        hid_enough = g_signal_connect(app->pciesrc,
+                "enough-data", G_CALLBACK(stop_feed),  app);
+        GST_INFO ("start_feed/stop_feed callbacks registered for UC2");
     }
 
-    if (app->h_param.usecase < VGST_USECASE_TYPE_APPSRC_TO_KMSSINK){
-    hid_sample = g_signal_connect(app->pciesink,                \
-            "new-sample",                                       \
-            G_CALLBACK(new_sample_cb),                          \
-            app);
+    /* Both UC1 and UC2 use appsink → register new-sample callback */
+    hid_sample = g_signal_connect(app->pciesink,
+            "new-sample", G_CALLBACK(new_sample_cb), app);
 
     pad = gst_element_get_static_pad (app->pciesink, "sink");
-    pid_query = gst_pad_add_probe (pad,                         \
-            GST_PAD_PROBE_TYPE_QUERY_DOWNSTREAM,                \
-            appsink_query_cb,                                   \
-            NULL,                                               \
-            NULL);
-	}
+    pid_query = gst_pad_add_probe (pad,
+            GST_PAD_PROBE_TYPE_QUERY_DOWNSTREAM,
+            appsink_query_cb, NULL, NULL);
 
     /* Add watch for messages */
     gst_bus_add_watch (bus, (GstBusFunc) bus_message, app);
@@ -840,11 +598,10 @@ gint main (gint argc, gchar *argv[])
     app->export_fd_size = get_export_fd_size(app->yuv_frame_size);
     GST_INFO("export fd size = %lu", app->export_fd_size);
 
-    if (app->h_param.usecase > VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS) {
+    /* UC2: allocate DMA buffer pool in the driver */
+    if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_TO_HOST_BYPASS) {
         app->dma_export.fd = 0;
         app->dma_export.size = app->export_fd_size;
-        /* Driver will initalize bufferpool and store FDs, which can be
-           export to user via dma-map/unmap IOCTLs */
         ret = pcie_dma_export(app->fd, &app->dma_export);
         if (ret < 0) {
             g_printerr ("Failed to initialize bufferpool");
@@ -852,64 +609,66 @@ gint main (gint argc, gchar *argv[])
         }
     }
 
-    /* move pipeline to playing state  */
+    /* Move pipeline to PLAYING */
     gst_element_set_state (app->pipeline, GST_STATE_PLAYING);
-    GST_INFO("Moved pipeline to playing stat\n");
+    g_print("[pcie_main] Pipeline PLAYING: UC%u %dx%d @ %d fps\n",
+            (app->h_param.usecase == VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS) ? 1u : 2u,
+            app->h_param.input_res.width, app->h_param.input_res.height,
+            app->h_param.fps);
 
     g_main_loop_run (app->loop);
-    GST_INFO("Exiting the app...");
+    g_print("[pcie_main] Exiting: appsink_frames=%lu appsrc_frames=%lu\n",
+            app->appsink_framecnt, app->appsrc_framecnt);
 
     gst_element_set_state (app->pipeline, GST_STATE_NULL);
 
-    if (app->h_param.usecase > VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS) {
-        /* release bufferpool memory */
+    /* UC2: release bufferpool memory */
+    if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_TO_HOST_BYPASS) {
         ret = pcie_dma_export_release(app->fd, &app->dma_export);
         if (ret < 0)
             g_printerr ("Failed to release bufferpool");
     }
 
-    /* set read transfer done and write transfer done, so that
-       host application can gracefuly restarts */
+    /* Signal host that EP is done */
     read_write_transfer_done(app);
 
 DESTROY_PIPELINE:
 
     /* Remove and unref pad probe */
-    if (app->h_param.usecase < VGST_USECASE_TYPE_APPSRC_TO_KMSSINK){
-       gst_pad_remove_probe (pad, pid_query);
-       gst_object_unref (pad);
-       pad = NULL;
-       GST_INFO("Removed pad probe");
-    }
-    /* Unregister singal handler */
-    if (app->h_param.usecase > VGST_USECASE_TYPE_MIPISRC_TO_HOST_BYPASS) {
+    gst_pad_remove_probe (pad, pid_query);
+    gst_object_unref (pad);
+    pad = NULL;
+
+    /* Disconnect signal handlers */
+    if (app->h_param.usecase == VGST_USECASE_TYPE_APPSRC_TO_HOST_BYPASS) {
         g_signal_handler_disconnect (app->pciesrc,  hid_need);
         g_signal_handler_disconnect (app->pciesrc,  hid_enough);
     }
-    if (app->h_param.usecase < VGST_USECASE_TYPE_APPSRC_TO_KMSSINK) {
     g_signal_handler_disconnect (app->pciesink, hid_sample);
     GST_DEBUG ("Disconnected registered signal callbacks");
-	}
+
     /* Remove and unref bus watch */
     gst_bus_remove_watch (bus);
     gst_object_unref (bus);
     bus = NULL;
-    GST_DEBUG ("Removed bus watch handler");
 
     /* Unref loop */
-    if(app->loop)
+    if (app->loop)
         g_main_loop_unref(app->loop);
     app->loop = NULL;
-    GST_DEBUG ("Unref main loop");
+
+    /* Release cached DMA-buf allocator (created once in feed_data, reused per frame) */
+    if (app->dmabuf_allocator) {
+        gst_object_unref (app->dmabuf_allocator);
+        app->dmabuf_allocator = NULL;
+    }
 
     /* Destroy GStreamer pipeline */
-    GST_DEBUG("Destroying pipeline");
     destroy_pipeline (app);
 
 GST_RESET_ELEMENTS:
 
     /* Release GStreamer elements */
-    GST_DEBUG("Releasing GStreamer elements");
     gst_reset_elements(app);
 
 PCIE_DEV_CLOSE:
@@ -921,13 +680,8 @@ PCIE_DEV_CLOSE:
     pcie_close(app->fd);
     GST_DEBUG ("Closed PCIe FD");
 
-    /* free debug category */
     gst_debug_category_free(pcie_gst_app_debug);
-    GST_DEBUG ("freed gst debug device category");
-
-    /* Gstreamer deinit */
     gst_deinit();
-    GST_DEBUG ("GStreamer deinitialized");
 
     return 0;
 }

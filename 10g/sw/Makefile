@@ -17,17 +17,17 @@ BUILD_BASE := $(WORK_DIR)
 # Yocto repository configuration (clones to current path)
 REPO_URL := https://storage.googleapis.com/git-repo-downloads/repo
 REPO_MANIFEST_URL := https://github.com/Xilinx/yocto-manifests.git
-REPO_BRANCH := refs/tags/amd-edf-rel-v25.11
+REPO_BRANCH := refs/tags/amd-edf-rel-v26.06
 REPO_MANIFEST_FILE := default-edf.xml
-YOCTO_DIR := $(BUILD_BASE)/yocto-edf-25.11
+YOCTO_DIR := $(BUILD_BASE)/yocto-edf-26.1
 
 # Build target configuration
-MACHINE := versal-2ve-2vm-vek385-revb-sdt-seg
+MACHINE := versal-2ve-2vm-vek385-revb-multidomain
 SDT_DIR := $(BUILD_BASE)/../hw/MMI_10g_sdt
 IMAGE_OSPI := edf-ospi
 IMAGE_ROOTFS := edf-linux-disk-image
 
-VEK385_TEMPLATE := ../sources/meta-amd-adaptive-socs/meta-amd-adaptive-socs-bsp/conf/machineyaml/versal-2ve-2vm-vek385-revb-sdt-seg.yaml
+VEK385_TEMPLATE := ../sources/meta-amd-adaptive-socs/meta-amd-adaptive-socs-bsp/conf/machineyaml/versal-2ve-2vm-vek385-revb-multidomain.yaml
 
 # Detect if current path is on NFS filesystem
 # Checks for 'nfs' or 'nfs4' filesystem type
@@ -36,7 +36,7 @@ IS_NFS := $(shell df -T $(WORK_DIR) 2>/dev/null | awk 'NR==2 {print $$2}' | grep
 # Set YOCTO_TMP_DIR based on NFS detection
 # NFS builds should use /scratch
 ifeq ($(IS_NFS),yes)
-    YOCTO_TMP_DIR := /scratch/$(USER)/yocto_tmp
+    YOCTO_TMP_DIR := /scratch/$(USER)/10g_yocto_tmp
     $(info *** NFS filesystem detected ***)
     $(info *** Using /scratch for TMP_DIR: $(YOCTO_TMP_DIR) ***)
 else
@@ -67,8 +67,43 @@ COLOR_CYAN := \033[36m
 # Phony Targets
 #===============================================================================
 
-.PHONY: all setup sync configure gen-machine build-ospi build-rootfs build images \
+.PHONY: help all setup sync configure gen-machine build-ospi build-rootfs build artifacts \
         clean-machineconf clean
+
+
+help:
+	@echo "Usage:"
+	@echo ""
+	@echo "  make help"
+	@echo "    Show this help message"
+	@echo ""
+	@echo "  make all"
+	@echo "    Build OSPI and RootFS images"
+	@echo ""
+	@echo "  make setup"
+	@echo "    Download repo tool and prepare the build environment"
+	@echo ""
+	@echo "  make sync"
+	@echo "    Initialize and sync Yocto repositories"
+	@echo ""
+	@echo "  make configure"
+	@echo "    Configure Yocto build environment"
+	@echo ""
+	@echo "  make gen-machine"
+	@echo "    Generate machine configuration from SDT"
+	@echo ""
+	@echo "  make build-ospi"
+	@echo "    Build OSPI boot image"
+	@echo ""
+	@echo "  make build-rootfs"
+	@echo "    Build Linux kernel and root filesystem"
+	@echo ""
+	@echo "  make artifacts"
+	@echo "    Copy generated images to local artifacts directory"
+	@echo ""
+	@echo "  make clean"
+	@echo "    Clean build outputs"
+	``
 
 #===============================================================================
 # Default Target
@@ -126,7 +161,7 @@ sync: setup
 		echo "Repo already initialized in $(YOCTO_DIR)"; \
 	fi
 	@if [ ! -d $(YOCTO_DIR)/sources ]; then \
-		echo "Syncing repositories (this may take 10-30 minutes on first run)..."; \
+		echo "Syncing repositories (this may take 5-10 minutes on first run)..."; \
 		cd $(YOCTO_DIR) && $(BUILD_BASE)/repo sync -j$(PARALLEL_MAKE) || { \
 			printf "%b\n" "$(COLOR_YELLOW)Error: repo sync failed$(COLOR_RESET)"; \
 			echo "Try running: cd $(YOCTO_DIR) && $(BUILD_BASE)/repo sync"; \
@@ -151,6 +186,9 @@ configure: sync
 		echo "Sourcing edf-init-build-env and configuring local.conf..."; \
 		cd $(YOCTO_DIR); \
 		source edf-init-build-env; \
+		cp -rf ../../meta-custom-bsp ../sources/.;\
+	        bitbake-layers add-layer ../sources/meta-custom-bsp;\
+		echo "meta-custom-bsp layer added successfully"; \
 		if [ '$(IS_NFS)' = 'yes' ]; then \
 			if ! grep -q '^TMPDIR = ' conf/local.conf 2>/dev/null; then \
 				echo 'TMPDIR = "$(YOCTO_TMP_DIR)"' >> conf/local.conf; \
@@ -204,12 +242,12 @@ gen-machine: configure
 		echo "Parsing hardware description and generating device tree..."; \
 		cd $(YOCTO_DIR); \
 		source edf-init-build-env; \
-		gen-machineconf parse-sdt --template $(VEK385_TEMPLATE) --hw-description $(SDT_DIR) || { \
+		gen-machineconf parse-sdt --template $(VEK385_TEMPLATE) --hw-description $(SDT_DIR) --add-config CONFIG_SUBSYSTEM_PL_INPUT_DTSI=\"$(YOCTO_DIR)/sources/meta-custom-bsp/pl_user.dtsi\" || { \
 			printf "%b\n" "$(COLOR_YELLOW)Error: Failed to generate machine configuration$(COLOR_RESET)"; \
 			exit 1; \
 		}; \
 		echo ""; \
-		echo "Generated machine file as $(YOCTO_DIR)/build/conf/machine/versal-2ve-2vm-vek385-revb-sdt-seg.conf"; \
+		echo "Generated machine file as $(YOCTO_DIR)/build/conf/machine/versal-2ve-2vm-vek385-revb-multidomain.conf"; \
 		ls -lh $(YOCTO_DIR)/build/output 2>/dev/null || echo "  (directory listing unavailable)"; \
 		echo ""; \
 		printf "%b\n" "$(COLOR_GREEN)Machine configuration generated: $(MACHINE)$(COLOR_RESET)"; \
@@ -292,12 +330,12 @@ artifacts: build-ospi build-rootfs
 	else \
 		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) RootFS NOT FOUND"; \
 	fi; \
-	PL_DTSI="$(YOCTO_DIR)/build/conf/dts/$(MACHINE)/pl-overlay-full/pl.dtsi"; \
-	if [ -f "$$PL_DTSI" ]; then \
-		cp "$$PL_DTSI" $(BUILD_BASE)/artifacts/pl.dtsi; \
-		printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied pl.dtsi"; \
+	PL_DTSO="$(YOCTO_DIR)/build/conf/dts/$(MACHINE)/pl-overlay-full/pl.dtso"; \
+	if [ -f "$$PL_DTSO" ]; then \
+		cp "$$PL_DTSO" $(BUILD_BASE)/artifacts/pl.dtso; \
+		printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied pl.dtso"; \
 	else \
-		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) pl.dtsi not found: $(YOCTO_DIR)/build/conf/dts/$(MACHINE)/pl-overlay-full/pl.dtsi"; \
+		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) pl.dtso not found: $(YOCTO_DIR)/build/conf/dts/$(MACHINE)/pl-overlay-full/pl.dtso"; \
 	fi
 	@echo ""
 	@ls -lh $(BUILD_BASE)/artifacts/ 2>/dev/null
@@ -323,7 +361,7 @@ build: artifacts
 	@echo "Key files copied:"
 	@echo "  - ospi.bin (OSPI boot image)"
 	@echo "  - edf-linux.wic.xz (rootfs)"
-	@echo "  - pl.dtsi (device tree overlay)"
+	@echo "  - pl.dtso (device tree overlay)"
 	@echo ""
 
 #===============================================================================

@@ -42,6 +42,10 @@
 
 #define RW_MAX_SIZE	0x7ffff000
 
+/* Helper macro: compute elapsed nanoseconds between two struct timespec values */
+#define ELAPSED_NS(start, end) \
+	(((end).tv_sec - (start).tv_sec) * 1000000000LL + ((end).tv_nsec - (start).tv_nsec))
+
 int verbose = 0;
 
 uint64_t getopt_integer(char *optarg)
@@ -60,10 +64,13 @@ uint64_t getopt_integer(char *optarg)
 ssize_t read_to_buffer(char *fname, int fd, char *buffer, uint64_t size,
 			uint64_t base)
 {
+	struct timespec ts_start, ts_end;
 	ssize_t rc;
 	uint64_t count = 0;
 	char *buf = buffer;
 	off_t offset = base;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts_start);
 
 	do { /* Support zero byte transfer */
 		ssize_t bytes = size - count;
@@ -78,12 +85,18 @@ ssize_t read_to_buffer(char *fname, int fd, char *buffer, uint64_t size,
 					"%s, seek off 0x%lx failed %zd.\n",
 					fname, offset, rc);
 				perror("seek file");
+				/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
+				printf("[TIMING] read_to_buffer(%s): %.3f ms (early exit)\n",
+					fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
 				return -EIO;
 			}
 			if (rc != offset) {
 				fprintf(stderr,
 					"%s, seek off 0x%lx != 0x%lx.\n",
 					fname, rc, offset);
+				/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
+				printf("[TIMING] read_to_buffer(%s): %.3f ms (early exit)\n",
+					fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
 				return -EIO;
 			}
 		}
@@ -95,12 +108,18 @@ ssize_t read_to_buffer(char *fname, int fd, char *buffer, uint64_t size,
 				"%s, read off 0x%lx + 0x%lx failed %zd.\n",
 				fname, offset, bytes, rc);
 			perror("read file");
+			/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
+			printf("[TIMING] read_to_buffer(%s): %.3f ms (early exit)\n",
+				fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
 			return -EIO;
 		}
 		if (rc != bytes) {
 			fprintf(stderr,
 				"%s, R off 0x%lx, 0x%lx != 0x%lx.\n",
 				fname, count, rc, bytes);
+			/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
+			printf("[TIMING] read_to_buffer(%s): %.3f ms (early exit)\n",
+				fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
 			return -EIO;
 		}
 
@@ -112,18 +131,29 @@ ssize_t read_to_buffer(char *fname, int fd, char *buffer, uint64_t size,
 	if (count != size) {
 		fprintf(stderr, "%s, R failed 0x%lx != 0x%lx.\n",
 				fname, count, size);
+		/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
+		printf("[TIMING] read_to_buffer(%s): %.3f ms (early exit)\n",
+			fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
 		return -EIO;
 	}
+
+	clock_gettime(CLOCK_MONOTONIC, &ts_end);
+	/* [TIMING debug] Uncomment to log per-frame DMA read latency:
+	printf("[TIMING] read_to_buffer(%s): %.3f ms\n",
+		fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
 	return count;
 }
 
 ssize_t write_from_buffer(char *fname, int fd, char *buffer, uint64_t size,
 			uint64_t base)
 {
+	struct timespec ts_start, ts_end;
 	ssize_t rc;
 	uint64_t count = 0;
 	char *buf = buffer;
 	off_t offset = base;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts_start);
 
 	do { /* Support zero byte transfer */
 		ssize_t bytes = size - count;
@@ -138,12 +168,18 @@ ssize_t write_from_buffer(char *fname, int fd, char *buffer, uint64_t size,
 					"%s, seek off 0x%lx failed %zd.\n",
 					fname, offset, rc);
 				perror("seek file");
+				/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
+				printf("[TIMING] write_from_buffer: %.3f ms (early exit)\n",
+					ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
 				return -EIO;
 			}
 			if (rc != offset) {
 				fprintf(stderr,
 					"%s, seek off 0x%lx != 0x%lx.\n",
 					fname, rc, offset);
+				/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
+				printf("[TIMING] write_from_buffer: %.3f ms (early exit)\n",
+					ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
 				return -EIO;
 			}
 		}
@@ -154,11 +190,17 @@ ssize_t write_from_buffer(char *fname, int fd, char *buffer, uint64_t size,
 			fprintf(stderr, "%s, W off 0x%lx, 0x%lx failed %zd.\n",
 				fname, offset, bytes, rc);
 			perror("write file");
+			/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
+			printf("[TIMING] write_from_buffer: %.3f ms (early exit)\n",
+				ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
 			return -EIO;
 		}
 		if (rc != bytes) {
 			fprintf(stderr, "%s, W off 0x%lx, 0x%lx != 0x%lx.\n",
 				fname, offset, rc, bytes);
+			/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
+			printf("[TIMING] write_from_buffer: %.3f ms (early exit)\n",
+				ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
 			return -EIO;
 		}
 
@@ -170,8 +212,16 @@ ssize_t write_from_buffer(char *fname, int fd, char *buffer, uint64_t size,
 	if (count != size) {
 		fprintf(stderr, "%s, R failed 0x%lx != 0x%lx.\n",
 				fname, count, size);
+		/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
+		printf("[TIMING] write_from_buffer: %.3f ms (early exit)\n",
+			ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
 		return -EIO;
 	}
+
+	clock_gettime(CLOCK_MONOTONIC, &ts_end);
+	/* [TIMING debug] Uncomment to log per-frame DMA write latency:
+	printf("[TIMING] write_from_buffer: %.3f ms\n",
+		ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
 	return count;
 }
 

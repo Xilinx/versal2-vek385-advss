@@ -9,12 +9,12 @@ PWD = $(shell readlink -f .)
 VIVADO = $(XILINX_VIVADO)/bin/vivado
 SDTGEN = $(XILINX_VIVADO)/bin/sdtgen
 JOBS ?= 8
-VIV_PRJ_DIR = $(PWD)/runs/MMI_10g
+VIV_PRJ_DIR = $(PWD)/runs/MMI_10G
 VIV_SCRIPTS_DIR = scripts
 
 VIV_TIMING_ERROR = "CRITICAL WARNING: \[Timing 38-282\] The design failed to meet the timing requirements"
 
-VIV_DESIGN = MMI_10g
+VIV_DESIGN = MMI_10G
 VIV_XSA = $(VIV_PRJ_DIR)/$(VIV_DESIGN).xsa
 VIV_SRC = $(VIV_SCRIPTS_DIR)/main.tcl
 
@@ -50,4 +50,4 @@ sdt: $(SDT_SRC) $(VIV_XSA)
 
 .PHONY: clean
 clean:
-	$(RM) $(VIV_PRJ_DIR) vivado* .Xil *dynamic* *.log *.xpe .crashReporter hd_visual *.swp
+	$(RM) $(VIV_PRJ_DIR) vivado* .Xil *dynamic* *.log *.xpe .crashReporter hd_visual *.swp MMI_10g_sdt

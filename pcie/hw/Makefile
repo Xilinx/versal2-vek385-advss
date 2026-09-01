@@ -5,6 +5,9 @@
 RM = rm -rf
 VIVADO = $(XILINX_VIVADO)/bin/vivado
 
+NPROC := $(shell nproc)
+JOBS := $(shell echo $$(( $(NPROC) - 2 )))
+
 DESIGN ?= pcie
 
 # valid designs
@@ -23,7 +26,8 @@ help:
 all: runs/pcie/pcie.xsa
 
 runs/pcie/pcie.xsa:
-	${VIVADO} -mode batch -s main.tcl
+	@if [ -d runs ]; then echo "Removing existing runs/ ..."; $(RM) runs; fi
+	${VIVADO} -mode batch -s ./scripts/main.tcl -tclargs -jobs $(JOBS)
 
 clean:
 	rm -rf runs README.hw vivado*.log vivado*.jou

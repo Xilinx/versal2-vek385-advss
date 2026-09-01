@@ -1,5 +1,6 @@
-# Copyright (C) 2025 Advanced Micro Devices, Inc.
+# Copyright (c) 2026 Advanced Micro Devices, Inc.
 # SPDX-License-Identifier: MIT
+# -----------------------------------------------
 
 # parse arguments
 for { set i 0 } { $i < $argc } { incr i } {

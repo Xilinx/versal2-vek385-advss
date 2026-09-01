@@ -40,15 +40,27 @@ gboolean feed_data (gpointer user_data)
         return FALSE;
     };
 
-    app->appsrc_framecnt++;
+    /* Check for end-of-stream BEFORE incrementing the frame counter so
+     * appsrc_framecnt reflects only frames actually pushed, and return
+     * G_SOURCE_REMOVE to stop the g_idle_add handler from spinning. */
     if (app->read_offset >= app->h_param.length) {
         if(!app->eos_flag) {
           g_signal_emit_by_name (app->pciesrc, "end-of-stream", &ret);
           app->eos_flag = TRUE;
-          GST_DEBUG ("Appsrc: Emitting EOS");
+          GST_DEBUG ("Appsrc: Emitting EOS at frame %lu", app->appsrc_framecnt);
         }
-        return TRUE;
+        app->sourceid = 0;
+        return G_SOURCE_REMOVE;
     }
+
+    app->appsrc_framecnt++;
+
+    /* Create the DMA-buf allocator once and cache it for the lifetime of the
+     * pipeline.  gst_dmabuf_allocator_new() is a GLib object allocation — calling
+     * it every frame adds per-frame overhead proportional to buffer size (GLib
+     * type-system init, refcount machinery) and leaks the old allocator. */
+    if (!app->dmabuf_allocator)
+        app->dmabuf_allocator = gst_dmabuf_allocator_new();
 
     buffer = gst_buffer_new ();
     app->dma_map[app->dma_map_idx].fd   = 0;
@@ -68,7 +80,7 @@ gboolean feed_data (gpointer user_data)
     /* trigger dma transfer */
     pcie_read(app->fd, app->yuv_frame_size, 0, NULL);
 
-    allocator = gst_dmabuf_allocator_new ();
+    allocator = app->dmabuf_allocator;
 
     /* allocate dmabuf type memory */
     memory = gst_dmabuf_allocator_alloc (allocator,
@@ -129,7 +141,8 @@ gboolean feed_data (gpointer user_data)
         app->dma_map_idx++;
 
     gst_buffer_unref (buffer);
-    gst_object_unref (allocator);
+    /* Do NOT unref the allocator here — it is cached in app->dmabuf_allocator
+     * and reused across frames.  It is freed once in pcie_main.c cleanup. */
 
     return TRUE;
 }
@@ -139,7 +152,7 @@ void start_feed (GstElement *source, guint size, gpointer data)
     App *app = (App *)data;
     if (!app) {
         GST_DEBUG("start_feed() user_data pointer is NULL\n");
-        return FALSE;
+        return;
     }
     if (app->sourceid == 0) {
         GST_DEBUG ("Start feeding at frame %lu", app->appsrc_framecnt);
