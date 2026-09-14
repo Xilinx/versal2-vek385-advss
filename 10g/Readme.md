@@ -7,15 +7,15 @@
 ## 10g ADVSS Hardware Design
 
 The 10g ADVSS hardware design targets:
-- **MIPI-4x Capture + ISP-Non-MCM +Mixer + HDMI-2.1 Tx@8kp30
-- **MIPI-4x Capture + ISP-Non-MCM +VCU encode + decode + Mixer +HDMI-2.1 Tx@8kp30
+- **MIPI-4x Capture + ISP-Non-MCM +Mixer + HDMI-2.1 Tx
+- **MIPI-4x Capture + ISP-Non-MCM +VCU encode + decode + Mixer +HDMI-2.1 Tx
 - **MIPI-4x Capture + ISP-Non-MCM +VCU encode + 10g streamout 
 
-The hardware design is targeted for the **VEK385 Rev-B1 board**.
+The hardware design is targeted for the **VEK385 Rev-B1 & Rev-B2 board**.
 
 ### Tools Version
 
-- **Vivado™ 2025.2**
+- **Vivado™ 2026.1**
 
 ### Build Instructions
 
