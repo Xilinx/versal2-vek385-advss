@@ -68,7 +68,7 @@ void videofrm::stopConvertThread()
 	if (worker_running_.exchange(false)) {
 		if (convert_thread_.joinable())
 			convert_thread_.join();
-		printf("[videofrm] Convert thread joined. displayed=%lu overwritten=%lu\n",
+		PCIE_HOST_DBG_PRINT("[videofrm] Convert thread joined. displayed=%lu overwritten=%lu\n",
 		       frames_displayed_.load(), frames_overwritten_.load());
 	}
 }
@@ -85,7 +85,7 @@ void videofrm::updateFPSslot(int fps)
 	 * Floor at 10ms (100 Hz) to avoid excessive timer overhead. */
 	int poll_ms = (fps > 0) ? (1000 / (fps * 2)) : 15;
 	if (poll_ms < 10) poll_ms = 10;
-	printf("[videofrm] Timer poll interval: %d ms (source %d fps)\n", poll_ms, fps);
+	PCIE_HOST_DBG_PRINT("[videofrm] Timer poll interval: %d ms (source %d fps)\n", poll_ms, fps);
 	t->setInterval(poll_ms);
 	t->start();
 }
@@ -153,7 +153,7 @@ void videofrm::config_frame()
 	convert_thread_ = std::thread(&videofrm::convertAndDisplayWorker, this);
 
 	emit updateFPS(FPS);
-	printf("[videofrm] config_frame: %dx%d @ %d fps. Worker thread started.\n",
+	PCIE_HOST_DBG_PRINT("[videofrm] config_frame: %dx%d @ %d fps. Worker thread started.\n",
 	       WID, HEI, FPS);
 }
 
@@ -169,7 +169,7 @@ void videofrm::convertAndDisplayWorker()
 	struct timespec ts_last, ts_now;
 	clock_gettime(CLOCK_MONOTONIC, &ts_last);
 
-	printf("[convertWorker] Thread started\n");
+	PCIE_HOST_DBG_PRINT("[convertWorker] Thread started\n");
 
 	while (worker_running_ || queue_frame.index > 0) {
 		/* Wait for a frame — yield rather than spin */
@@ -216,7 +216,7 @@ void videofrm::convertAndDisplayWorker()
 			if (new_frame_ready_) {
 				frames_overwritten_++;  /* previous converted frame never shown */
 				if (frames_overwritten_ % 30 == 1)
-					printf("[convertWorker] WARNING: frame overwritten before display "
+					PCIE_HOST_DBG_PRINT("[convertWorker] WARNING: frame overwritten before display "
 					       "total_overwritten=%lu\n", frames_overwritten_.load());
 			}
 			std::swap(dfrm_work_, dfrm_ready_);
@@ -229,7 +229,7 @@ void videofrm::convertAndDisplayWorker()
 			clock_gettime(CLOCK_MONOTONIC, &ts_now);
 			double elapsed = (ts_now.tv_sec  - ts_last.tv_sec) +
 			                 (ts_now.tv_nsec - ts_last.tv_nsec) / 1e9;
-			printf("[convertWorker] 30 frames in %.3f s (%.1f fps) "
+			PCIE_HOST_DBG_PRINT("[convertWorker] 30 frames in %.3f s (%.1f fps) "
 			       "queue_depth=%zu overwritten=%lu\n",
 			       elapsed, 30.0 / elapsed,
 			       queue_frame.index,
@@ -238,8 +238,9 @@ void videofrm::convertAndDisplayWorker()
 		}
 	}
 
-	printf("[convertWorker] Exiting. total_converted=%lu true_drops(overwritten)=%lu\n",
+	PCIE_HOST_DBG_PRINT("[convertWorker] Exiting. total_converted=%lu true_drops(overwritten)=%lu\n",
 	       local_count, frames_overwritten_.load());
+	printf("[convertWorker] Exiting\n");
 }
 
 /* ---------------------------------------------------------------------------
@@ -254,6 +255,15 @@ void videofrm::updateframe()
 		if (new_frame_ready_) {
 			hasWindow = true;
 			cv::Mat mat_bgr = cv::Mat(HEI, WID, CV_8UC3, dfrm_ready_);
+
+			/* Overlay cached FPS (recomputed every 30 frames below) — a
+			 * single small text draw on the Qt timer thread, not the DMA/convert
+			 * path.  Solid black fill, no outline. */
+			char fps_text[32];
+			snprintf(fps_text, sizeof(fps_text), "FPS: %.1f", last_window_fps_);
+			cv::putText(mat_bgr, fps_text, cv::Point(10, 30),
+			            cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 0), 2);
+
 			imshow("Video", mat_bgr);
 			cv::waitKey(1);
 			new_frame_ready_ = false;
@@ -278,7 +288,10 @@ void videofrm::updateframe()
 				double avg_elapsed = (ts_now.tv_sec  - fps_ts_start_.tv_sec) +
 				                     (ts_now.tv_nsec - fps_ts_start_.tv_nsec) / 1e9;
 
-				printf("[updateframe] displayed=%lu  window_fps=%.1f  avg_fps=%.1f  "
+				last_window_fps_ = 30.0 / win_elapsed;
+				last_avg_fps_    = disp / avg_elapsed;
+
+				PCIE_HOST_DBG_PRINT("[updateframe] displayed=%lu  window_fps=%.1f  avg_fps=%.1f  "
 				       "queue_depth=%zu  overwritten=%lu\n",
 				       disp,
 				       30.0 / win_elapsed,

@@ -69,6 +69,29 @@
 #define HOST_DISPLAY_RING_DEPTH   8   /* queue_frame      : C2H -> display   */
 #define HOST_FILE_RING_DEPTH      4   /* queue_file_frame : file -> H2C      */
 
+/* Max close+reopen retry attempts on a QDMA H2C/C2H EIO before declaring the
+ * hardware permanently stuck and stopping the app. A single retry is not
+ * always enough to clear the known intermittent QDMA soft IP fault — each attempt re-runs the full
+ * close/reopen cycle, which is what actually resets the driver queue state. */
+#define QDMA_EIO_MAX_RETRIES      5
+
+/* Single switch for all host-app diagnostic prints (STALL/retrigger traces,
+ * periodic throughput logs, verbose exit summaries). Flip to 1 for a debug
+ * build, or pass -DPCIE_HOST_DEBUG_PRINTS=1 on the compiler command line;
+ * keep 0 for production. */
+#ifndef PCIE_HOST_DEBUG_PRINTS
+#define PCIE_HOST_DEBUG_PRINTS 0
+#endif
+
+#if PCIE_HOST_DEBUG_PRINTS
+#define PCIE_HOST_DBG_PRINT(...) printf(__VA_ARGS__)
+#else
+/* "if (0) printf(...)" (not a bare no-op) so arguments are still
+ * type-checked and referenced -- avoids -Wunused-variable on values that
+ * are only ever used inside these debug prints. Dead branch, zero cost. */
+#define PCIE_HOST_DBG_PRINT(...) do { if (0) printf(__VA_ARGS__); } while (0)
+#endif
+
 typedef struct circular_buffer
 {
 char *buffer;

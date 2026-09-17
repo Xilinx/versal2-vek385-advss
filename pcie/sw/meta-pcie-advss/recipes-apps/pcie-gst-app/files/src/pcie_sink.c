@@ -108,7 +108,14 @@ GstFlowReturn new_sample_cb (GstElement* elt, App* app)
     /* initiate dma write operation */
     ret = pcie_write(app->fd, app->yuv_frame_size, 0, NULL);
     if (ret < 0) {
-        GST_ERROR ("pcie_write failed, err - %d", ret);
+        PCIE_APP_DBG_ERROR ("pcie_write failed, err - %d", ret);
+    } else {
+        /* Only count genuinely confirmed transfers here — appsink_framecnt
+         * above counts every attempt (kept as-is; other code may rely on
+         * it), while this reflects what the driver actually confirmed made
+         * it to the host, so target/host frame counts can be compared
+         * directly. */
+        app->appsink_confirmed_framecnt++;
     }
     GST_DEBUG ("Appsink: pcie write successful");
 
@@ -130,7 +137,7 @@ GstFlowReturn new_sample_cb (GstElement* elt, App* app)
         if (ts_last.tv_sec != 0) {
             double elapsed = (ts_now.tv_sec  - ts_last.tv_sec) +
                              (ts_now.tv_nsec - ts_last.tv_nsec) / 1e9;
-            g_print("[pcie_sink] 30 frames in %.3f s (%.1f fps) "
+            PCIE_APP_DBG_PRINT("[pcie_sink] 30 frames in %.3f s (%.1f fps) "
                     "total_appsink=%lu\n",
                     elapsed, 30.0 / elapsed, app->appsink_framecnt);
         }

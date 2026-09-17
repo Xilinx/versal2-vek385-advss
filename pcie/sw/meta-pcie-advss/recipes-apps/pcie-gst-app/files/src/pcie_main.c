@@ -617,8 +617,11 @@ gint main (gint argc, gchar *argv[])
             app->h_param.fps);
 
     g_main_loop_run (app->loop);
-    g_print("[pcie_main] Exiting: appsink_frames=%lu appsrc_frames=%lu\n",
-            app->appsink_framecnt, app->appsrc_framecnt);
+    PCIE_APP_DBG_PRINT("[pcie_main] Exiting: appsink_frames=%lu (confirmed=%lu) "
+            "appsrc_frames=%lu (confirmed=%lu)\n",
+            app->appsink_framecnt, app->appsink_confirmed_framecnt,
+            app->appsrc_framecnt, app->appsrc_confirmed_framecnt);
+    g_print("[pcie_main] Exiting\n");
 
     gst_element_set_state (app->pipeline, GST_STATE_NULL);
 

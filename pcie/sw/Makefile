@@ -27,7 +27,8 @@ MACHINE := versal-2ve-2vm-vek385-revb-multidomain
 IMAGE_OSPI := edf-ospi
 IMAGE_ROOTFS := edf-linux-disk-image
 SDT_DIR := $(BUILD_BASE)/sdt_output
-XSA_FILE ?= $(BUILD_BASE)/../hw/runs/pcie/pcie.xsa
+XSA_INPUT ?= pcie
+XSA_FILE ?= $(BUILD_BASE)/../hw/runs/pcie/$(XSA_INPUT).xsa
 
 VEK385_TEMPLATE := ../sources/meta-amd-adaptive-socs/meta-amd-adaptive-socs-bsp/conf/machineyaml/versal-2ve-2vm-vek385-revb-multidomain.yaml
 
@@ -58,10 +59,6 @@ endif
 # Build environment
 SHELL := /bin/bash
 
-# Parallel build jobs (adjust based on your system)
-PARALLEL_MAKE ?= $(shell nproc)
-BB_NUMBER_THREADS ?= $(shell nproc)
-
 #===============================================================================
 # Color output for better readability
 #===============================================================================
@@ -77,14 +74,14 @@ COLOR_CYAN := \033[36m
 # Phony Targets
 #===============================================================================
 
-.PHONY: all setup sync configure gen-machineconf build-ospi build-rootfs build \
-        check-xsa sdtgen clean-machineconf cleanall
+.PHONY: all setup sync configure gen-machineconf build-ospi build-rootfs artifacts \
+        check-xsa sdtgen clean-machineconf clean
 
 #===============================================================================
 # Default Target
 #===============================================================================
 
-all: build
+all: artifacts
 	@echo ""
 	@printf "%b\n" "$(COLOR_GREEN)$(COLOR_BOLD)================================================$(COLOR_RESET)"
 	@printf "%b\n" "$(COLOR_GREEN)$(COLOR_BOLD)  Build Complete!$(COLOR_RESET)"
@@ -137,7 +134,7 @@ sync: setup
 	fi
 	@if [ ! -d $(YOCTO_DIR)/sources ]; then \
 		echo "Syncing repositories (this may take 10-30 minutes on first run)..."; \
-		cd $(YOCTO_DIR) && $(BUILD_BASE)/repo sync -j$(PARALLEL_MAKE) || { \
+		cd $(YOCTO_DIR) && $(BUILD_BASE)/repo sync || { \
 			printf "%b\n" "$(COLOR_YELLOW)Error: repo sync failed$(COLOR_RESET)"; \
 			echo "Try running: cd $(YOCTO_DIR) && $(BUILD_BASE)/repo sync"; \
 			exit 1; \
@@ -175,14 +172,6 @@ configure: sync
 		else \
 			echo '  Local filesystem - using default TMPDIR from conf/local.conf'; \
 		fi && \
-		if ! grep -q '^PARALLEL_MAKE = ' conf/local.conf 2>/dev/null; then \
-			echo 'PARALLEL_MAKE = "-j $(PARALLEL_MAKE)"' >> conf/local.conf; \
-			echo '  Set PARALLEL_MAKE to -j$(PARALLEL_MAKE)'; \
-		fi && \
-		if ! grep -q '^BB_NUMBER_THREADS = ' conf/local.conf 2>/dev/null; then \
-			echo 'BB_NUMBER_THREADS = "$(BB_NUMBER_THREADS)"' >> conf/local.conf; \
-			echo '  Set BB_NUMBER_THREADS to $(BB_NUMBER_THREADS)'; \
-		fi && \
 		if ! grep -q 'IMAGE_INSTALL:append = " pcie-gst-app"' conf/local.conf 2>/dev/null; then \
 			echo 'IMAGE_INSTALL:append = " pcie-gst-app"' >> conf/local.conf; \
 			echo '  Configured rootfs to install pcie-gst-app package'; \
@@ -201,8 +190,6 @@ configure: sync
 	@echo "  Yocto location:    $(YOCTO_DIR)"
 	@echo "  TMP_DIR:           $(YOCTO_TMP_DIR)"
 	@echo "  NFS detected:      $(IS_NFS)"
-	@echo "  PARALLEL_MAKE:     -j$(PARALLEL_MAKE)"
-	@echo "  BB_NUMBER_THREADS: $(BB_NUMBER_THREADS)"
 	@echo ""
 	@printf "%b\n" "$(COLOR_GREEN)Build environment configuration complete$(COLOR_RESET)"
 	@echo ""
@@ -254,7 +241,7 @@ sdtgen: check-xsa
 			printf "%b\n" "$(COLOR_GREEN)✓ SDTGen ran successfully$(COLOR_RESET)"; \
 			echo ""; \
 			echo "Generated files in $(SDT_DIR):"; \
-			ls -lh $(SDT_DIR) 2>/dev/null || echo "  (directory listing unavailable)"; \
+			ls -lrth $(SDT_DIR) 2>/dev/null || echo "  (directory listing unavailable)"; \
 		else \
 			echo ""; \
 			printf "%b\n" "$(COLOR_YELLOW)✗ SDTGen failed or output directory not created$(COLOR_RESET)"; \
@@ -291,7 +278,7 @@ gen-machineconf: configure sdtgen
 		}; \
 		echo ""; \
 		echo "Generated machine file as $(YOCTO_DIR)/build/conf/machine/versal-2ve-2vm-vek385-revb-sdt-seg.conf"; \
-		ls -lh $(YOCTO_DIR)/build/output 2>/dev/null || echo "  (directory listing unavailable)"; \
+		ls -lrth $(YOCTO_DIR)/build/output 2>/dev/null || echo "  (directory listing unavailable)"; \
 		echo ""; \
 		printf "%b\n" "$(COLOR_GREEN)Machine configuration generated: $(MACHINE)$(COLOR_RESET)"; \
 		echo ""; \
@@ -323,7 +310,7 @@ build-ospi: gen-machineconf
 	@echo ""
 
 	@printf "%b\n" "$(COLOR_CYAN)$(COLOR_BOLD)=== Copying Boot Images to artifacts directory ===$(COLOR_RESET)"
-	@mkdir -p $(BUILD_BASE)/artifacts/overlay
+	@mkdir -p $(BUILD_BASE)/artifacts/pcie_overlay
 	@set -e; \
 	if [ "$(IS_NFS)" = "yes" ]; then \
 		DEPLOY_DIR_OSPI="$(YOCTO_TMP_DIR)/deploy/images/$(MACHINE)"; \
@@ -340,10 +327,9 @@ build-ospi: gen-machineconf
 		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) OSPI NOT FOUND"; \
 	fi; \
 	PL_DTSO="$(YOCTO_DIR)/build/conf/dts/$(MACHINE)/pl-overlay-full/pl.dtso"; \
-	PL_DTBO="$(BUILD_BASE)/artifacts/overlay/pl.dtbo"; \
+	PL_DTBO="$(BUILD_BASE)/artifacts/pcie_overlay/pl.dtbo"; \
 	if [ -f "$$PL_DTSO" ]; then \
-		cp "$$PL_DTSO" $(BUILD_BASE)/artifacts/overlay/pl.dtso; \
-		cp "$$PL_DTSO" $(BUILD_BASE)/artifacts/overlay/pl.dtso_ORIG; \
+		cp "$$PL_DTSO" $(BUILD_BASE)/artifacts/pcie_overlay/pl.dtso; \
 		printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied pl.dtso"; \
 		if dtc -@ -I dts -O dtb -o "$$PL_DTBO" "$$PL_DTSO"; then \
 			printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Generated pl.dtbo"; \
@@ -355,44 +341,19 @@ build-ospi: gen-machineconf
 	fi; \
 	PLD_PDI="$(SDT_DIR)/$(XSA_INPUT)_pld.pdi"; \
 	if [ -f "$$PLD_PDI" ]; then \
-		cp "$$PLD_PDI" $(BUILD_BASE)/artifacts/overlay/$(XSA_INPUT)_pld.pdi; \
+		cp "$$PLD_PDI" $(BUILD_BASE)/artifacts/pcie_overlay/$(XSA_INPUT)_pld.pdi; \
 		printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied $(XSA_INPUT)_pld.pdi"; \
 	else \
 		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) $(XSA_INPUT)_pld.pdi not found: $(SDT_DIR)"; \
 	fi; \
 	printf '{\n"shell_type" : "XRT_FLAT",\n"num_slots" : "1"\n}\n' \
-        > $(BUILD_BASE)/artifacts/overlay/shell.json
+        > $(BUILD_BASE)/artifacts/pcie_overlay/shell.json
 
 	@echo "Created shell.json"
-	@cat $(BUILD_BASE)/artifacts/overlay/shell.json
-
-	@if [ "$(IS_NFS)" = "yes" ]; then \
-        DEPLOY_DIR_BOOTBIN="$(YOCTO_TMP_DIR)/deploy/images/$(MACHINE)"; \
-        DEPLOY_DIR_SYSTEMDTB="$(YOCTO_TMP_DIR)/deploy/images/$(MACHINE)"; \
-	else \
-        DEPLOY_DIR_BOOTBIN="$(YOCTO_DIR)/build/tmp/deploy/images/$(MACHINE)"; \
-        DEPLOY_DIR_SYSTEMDTB="$(YOCTO_DIR)/build/tmp/deploy/images/$(MACHINE)"; \
-	fi; \
-    BOOTBIN_SRC="$$DEPLOY_DIR_BOOTBIN/boot.bin"; \
-	SYSTEMDTB_SRC="$$DEPLOY_DIR_SYSTEMDTB/system.dtb"; \
-    echo "Boot.bin Source:   $$BOOTBIN_SRC"; \
-    echo "System.dtb Source: $$SYSTEMDTB_SRC"; \
-    echo ""; \
-    if [ -f "$$BOOTBIN_SRC" ]; then \
-        cp "$$BOOTBIN_SRC" $(BUILD_BASE)/artifacts/; \
-        printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied boot.bin"; \
-    else \
-        printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) boot.bin NOT FOUND"; \
-    fi; \
-	if [ -f "$$SYSTEMDTB_SRC" ]; then \
-        cp "$$SYSTEMDTB_SRC" $(BUILD_BASE)/artifacts/; \
-        printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied system.dtb"; \
-    else \
-        printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) system.dtb NOT FOUND"; \
-    fi;
+	@cat $(BUILD_BASE)/artifacts/pcie_overlay/shell.json
 	@echo ""
-	@ls -lh $(BUILD_BASE)/artifacts/ 2>/dev/null
-	@ls -lh $(BUILD_BASE)/artifacts/overlay 2>/dev/null
+	@ls -lrth $(BUILD_BASE)/artifacts/ 2>/dev/null
+	@ls -lrth $(BUILD_BASE)/artifacts/pcie_overlay 2>/dev/null
 	@printf "%b\n" "$(COLOR_GREEN)Boot Images copy complete$(COLOR_RESET)"
 
 #===============================================================================
@@ -431,41 +392,16 @@ build-rootfs: configure
 		printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied edf-linux-disk-image-amd-cortexa78-mali-common.rootfs.wic.xz"; \
 	else \
 		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) RootFS NOT FOUND"; \
-	fi
-
-	@if [ "$(IS_NFS)" = "yes" ]; then \
-        DEPLOY_DIR_ROOTFS_UBOOT="$(YOCTO_TMP_DIR)/deploy/images/amd-cortexa78-mali-common"; \
-		DEPLOY_DIR_IMAGE="$(YOCTO_TMP_DIR)/deploy/images/amd-cortexa78-mali-common"; \
-	else \
-        DEPLOY_DIR_ROOTFS_UBOOT="$(YOCTO_DIR)/build/tmp/deploy/images/amd-cortexa78-mali-common"; \
-        DEPLOY_DIR_IMAGE="$(YOCTO_DIR)/build/tmp/deploy/images/amd-cortexa78-mali-common"; \
-	fi; \
-    ROOTFS_UBOOT_SRC="$$DEPLOY_DIR_ROOTFS_UBOOT/edf-linux-disk-image-amd-cortexa78-mali-common.rootfs.cpio.gz.u-boot"; \
-    IMAGE_SRC="$$DEPLOY_DIR_IMAGE/Image"; \
-	echo "RootFS CPIO U-Boot Source: $$ROOTFS_UBOOT_SRC"; \
-    echo "Image Source: $$IMAGE_SRC"; \
-    echo ""; \
-    if [ -f "$$ROOTFS_UBOOT_SRC" ]; then \
-        cp "$$ROOTFS_UBOOT_SRC" $(BUILD_BASE)/artifacts/rootfs.cpio.gz.u-boot; \
-        printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied rootfs.cpio.gz.u-boot"; \
-    else \
-        printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) rootfs.cpio.gz.u-boot NOT FOUND"; \
-    fi; \
-    if [ -f "$$IMAGE_SRC" ]; then \
-        cp "$$IMAGE_SRC" $(BUILD_BASE)/artifacts/; \
-        printf "%b\n" "$(COLOR_GREEN)✓$(COLOR_RESET) Copied Image"; \
-    else \
-		printf "%b\n" "$(COLOR_YELLOW)⚠$(COLOR_RESET) Image NOT FOUND"; \
 	fi;
 	@echo ""
-	@ls -lh $(BUILD_BASE)/artifacts/ 2>/dev/null
+	@ls -lrth $(BUILD_BASE)/artifacts/ 2>/dev/null
 	@printf "%b\n" "$(COLOR_GREEN)Rootfs copy complete$(COLOR_RESET)"
 
 #===============================================================================
 # Build: Build both OSPI and RootFS Images
 #===============================================================================
 
-build: build-ospi build-rootfs
+artifacts: build-ospi build-rootfs
 	@printf "%b\n" "$(COLOR_GREEN)$(COLOR_BOLD)=== All Images built successfully ===$(COLOR_RESET)"
 	@echo ""
 	@echo "Output directory:"
@@ -482,7 +418,7 @@ build: build-ospi build-rootfs
 	@printf "%b\n" "  - $(COLOR_GREEN)✓$(COLOR_RESET) ospi.bin (OSPI boot image)"
 	@printf "%b\n" "  - $(COLOR_GREEN)✓$(COLOR_RESET) edf-linux.wic.xz (rootfs)"
 	@printf "%b\n" "  - $(COLOR_GREEN)✓$(COLOR_RESET) pl.dtso (device tree overlay)"
-	@echo "Created overlay in artifacts/overlay:"
+	@echo "Created overlay in artifacts/pcie_overlay:"
 	@printf "%b\n" "  - $(COLOR_GREEN)✓$(COLOR_RESET) $(XSA_INPUT)_pld.pdi "
 	@printf "%b\n" "  - $(COLOR_GREEN)✓$(COLOR_RESET) shell.json "
 	@printf "%b\n" "  - $(COLOR_GREEN)✓$(COLOR_RESET) pl.dtbo "
@@ -505,5 +441,5 @@ clean-machineconf:
 	@printf "%b\n" "$(COLOR_GREEN)Machine configuration cleanup complete$(COLOR_RESET)"
 	@echo ""
 
-cleanall:
-	rm -rf yocto-edf-26.1/build sdt_output .Xil artifacts 
+clean:
+	rm -rf yocto-edf-26.1/build sdt_output .Xil artifacts $(YOCTO_TMP_DIR)* 

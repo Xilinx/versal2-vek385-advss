@@ -31,7 +31,7 @@ gboolean feed_data (gpointer user_data)
     GstMemory*    memory     = NULL;
     GstAllocator* allocator  = NULL;
     gint          ret        = 0;
-    gint          unmap_idx  = 0;
+    gint          idx        = 0;
 
     App *app = (App *)user_data;
     if(app == NULL) {
@@ -53,6 +53,8 @@ gboolean feed_data (gpointer user_data)
         return G_SOURCE_REMOVE;
     }
 
+    idx = app->dma_map_idx;
+
     app->appsrc_framecnt++;
 
     /* Create the DMA-buf allocator once and cache it for the lifetime of the
@@ -62,30 +64,55 @@ gboolean feed_data (gpointer user_data)
     if (!app->dmabuf_allocator)
         app->dmabuf_allocator = gst_dmabuf_allocator_new();
 
-    buffer = gst_buffer_new ();
-    app->dma_map[app->dma_map_idx].fd   = 0;
-    app->dma_map[app->dma_map_idx].size = app->export_fd_size;
-
+    /* This slot's previous mapping (if any) was already unmapped one frame
+     * ahead, at the bottom of the call that first populated it (see the
+     * eager unmap below) -- safe to reset and remap directly here. */
+    app->dma_map[idx].fd   = 0;
+    app->dma_map[idx].size = app->export_fd_size;
     GST_DEBUG ("Appsrc: frame-count - %lu", app->appsrc_framecnt);
 
     /* request driver to map available fd */
-    ret = pcie_dma_map(app->fd, &(app->dma_map[app->dma_map_idx]));
+    ret = pcie_dma_map(app->fd, &(app->dma_map[idx]));
     if (ret < 0) {
         GST_ERROR ("Appsrc: dma fd map failed with %d", ret);
         return FALSE;
     }
     GST_DEBUG ("Appsrc: dmabuf bufferpool fd - %d",
-               app->dma_map[app->dma_map_idx].fd);
+               app->dma_map[idx].fd);
 
     /* trigger dma transfer */
-    pcie_read(app->fd, app->yuv_frame_size, 0, NULL);
+    ret = pcie_read(app->fd, app->yuv_frame_size, 0, NULL);
+    if (ret < 0) {
+        /* Transfer not confirmed — the mapped slot may hold stale data from
+         * a previous frame (or be only partially written), which would show
+         * up as a black/garbled frame if pushed downstream.  Discard this
+         * attempt instead: unmap the slot without building/pushing a buffer.
+         * read_offset still advances so the stream keeps progressing rather
+         * than retrying the same (likely still-bad) transfer indefinitely. */
+        PCIE_APP_DBG_ERROR ("Appsrc: pcie_read failed, err - %d — discarding frame %lu",
+                   ret, app->appsrc_framecnt);
+        ret = pcie_dma_unmap(app->fd, &(app->dma_map[idx]));
+        if (ret < 0)
+            GST_ERROR ("Appsrc: dma unmap (discard path) failed with %d", ret);
 
+        app->read_offset += app->yuv_frame_size;
+
+        if (app->dma_map_idx >= (MAX_BUFFER_POOL_SIZE - 1))
+            app->dma_map_idx = 0;
+        else
+            app->dma_map_idx++;
+
+        return TRUE;
+    }
+    app->appsrc_confirmed_framecnt++;
+
+    buffer = gst_buffer_new ();
     allocator = app->dmabuf_allocator;
 
     /* allocate dmabuf type memory */
     memory = gst_dmabuf_allocator_alloc (allocator,
-                                         app->dma_map[app->dma_map_idx].fd,
-                                         app->dma_map[app->dma_map_idx].size);
+                                         app->dma_map[idx].fd,
+                                         app->dma_map[idx].size);
     if(!memory) {
         GST_ERROR ("Appsrc: Not able to allocate dma type memory");
         return FALSE;
@@ -111,7 +138,6 @@ gboolean feed_data (gpointer user_data)
         ((app->appsrc_framecnt/(float)app->h_param.fps) * 1e9);
 
     /* push buffer to next element */
-    gst_buffer_ref(buffer);
     g_signal_emit_by_name (app->pciesrc, "push-buffer", buffer, &ret);
     if(ret != GST_FLOW_OK) {
         GST_ERROR ("Appsrc: Push-buffer failed, frame-count - %lu, error - %d",
@@ -121,13 +147,19 @@ gboolean feed_data (gpointer user_data)
     /* This will help to decide when to send EOS */
     app->read_offset += app->yuv_frame_size;
 
-    /* start unmaping at MAX_BUFFER_POOL_SIZE frame */
-    if(app->appsrc_framecnt >= MAX_BUFFER_POOL_SIZE) {
-        unmap_idx = app->appsrc_framecnt % MAX_BUFFER_POOL_SIZE;
+    /* Reuse the pool on a fixed frame-count offset: once framecnt reaches
+     * MAX_BUFFER_POOL_SIZE, unmap the slot that is MAX_BUFFER_POOL_SIZE
+     * frames behind the current one (i.e. the slot about to be reused on
+     * the NEXT call). This is the original, field-proven approach -- a
+     * later attempt to gate reuse on a GStreamer weak-ref (confirming the
+     * pipeline had fully released the buffer) proved unreliable in
+     * practice (the weak-ref did not fire even after multiple fix
+     * attempts), causing a permanent hang and later a severe fps
+     * regression, so it was reverted. */
+    if (app->appsrc_framecnt >= MAX_BUFFER_POOL_SIZE) {
+        gint unmap_idx = app->appsrc_framecnt % MAX_BUFFER_POOL_SIZE;
         GST_DEBUG ("Appsrc: Unmapping dmabuf fd[%d] - %d",
                     unmap_idx, app->dma_map[unmap_idx].fd);
-
-        /* unmap oldest fd  */
         ret = pcie_dma_unmap(app->fd, &(app->dma_map[unmap_idx]));
         if (ret < 0)
             GST_ERROR ("Appsrc: dma unmap failed with %d", ret);
@@ -140,7 +172,6 @@ gboolean feed_data (gpointer user_data)
     else
         app->dma_map_idx++;
 
-    gst_buffer_unref (buffer);
     /* Do NOT unref the allocator here — it is cached in app->dmabuf_allocator
      * and reused across frames.  It is freed once in pcie_main.c cleanup. */
 

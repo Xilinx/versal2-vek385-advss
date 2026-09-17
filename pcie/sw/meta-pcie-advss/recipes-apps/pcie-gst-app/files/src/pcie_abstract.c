@@ -338,7 +338,7 @@ gint pcie_read(gint fpga_fd, gint size, gulong offset, gchar *buff)
 
         ret = read(fpga_fd, buff, size);
         if (ret < 0) {
-            GST_ERROR ("Return code = 0x%lx, read size = 0x%x", ret, size);
+            PCIE_APP_DBG_ERROR ("Return code = 0x%lx, read size = 0x%x", ret, size);
             return -EIO;
         }
     }
@@ -353,7 +353,7 @@ gint pcie_write(gint fpga_fd, gint size, gint offset, gchar *buff)
     if (fpga_fd >= 0) {
         ret = write(fpga_fd, buff, size);
         if (ret < 0) {
-            GST_ERROR ("Return code = 0x%lx, write size = 0x%x", ret, size);
+            PCIE_APP_DBG_ERROR ("Return code = 0x%lx, write size = 0x%x", ret, size);
             return -EIO;
         }
     }

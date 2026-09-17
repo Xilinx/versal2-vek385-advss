@@ -85,6 +85,8 @@ private:
     struct timespec       fps_ts_start_{};         /* set on first imshow, not config_frame */
     struct timespec       fps_ts_window_{};        /* window start for per-30-frame display fps */
     bool                  fps_ts_initialized_{false};
+    double                 last_window_fps_{0.0};   /* cached for on-screen overlay every frame */
+    double                 last_avg_fps_{0.0};      /* cached mean fps for on-screen overlay */
 
     void convertAndDisplayWorker();
     void stopConvertThread();

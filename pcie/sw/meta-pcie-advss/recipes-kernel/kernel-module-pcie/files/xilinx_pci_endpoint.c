@@ -58,6 +58,26 @@
 #define DEVICE_MAX_NUM      256
 #define MAX_INSTANCES	    4
 #define DRIVER_NAME        "pciep"
+
+/* Single switch for all driver-side diagnostic prints (per-transfer [DBG]
+ * traces and IRQ-recovery-path messages). Flip to 1 for a debug build;
+ * keep 0 for production. No dynamic_debug/debugfs configuration needed. */
+#ifndef PCIEP_DEBUG_PRINTS
+#define PCIEP_DEBUG_PRINTS 0
+#endif
+
+#if PCIEP_DEBUG_PRINTS
+#define pciep_dbg(dev, fmt, ...)       dev_dbg(dev, fmt, ##__VA_ARGS__)
+#define pciep_dbg_info(dev, fmt, ...)  dev_info_ratelimited(dev, fmt, ##__VA_ARGS__)
+#define pciep_dbg_warn(dev, fmt, ...)  dev_warn_ratelimited(dev, fmt, ##__VA_ARGS__)
+#else
+/* "if (0) real_call(...)" (not a bare no-op) so arguments are still
+ * type-checked and referenced -- avoids -Wunused-variable on values that
+ * are only ever used inside these debug calls. Dead branch, zero cost. */
+#define pciep_dbg(dev, fmt, ...)       do { if (0) dev_dbg(dev, fmt, ##__VA_ARGS__); } while (0)
+#define pciep_dbg_info(dev, fmt, ...)  do { if (0) dev_info_ratelimited(dev, fmt, ##__VA_ARGS__); } while (0)
+#define pciep_dbg_warn(dev, fmt, ...)  do { if (0) dev_warn_ratelimited(dev, fmt, ##__VA_ARGS__); } while (0)
+#endif
 #define DEVICE_NAME_FORMAT "pciep%d"
 
 /* PCIe registers to perform file read */
@@ -1070,7 +1090,8 @@ static long pciep_driver_file_ioctl(struct file *file, unsigned int cmd,
 /**
  * pciep_irq_recover - Recover from a lost interrupt.
  *
- * Two failure modes are handled:
+ * Three failure modes are handled, checked in order from most to least
+ * dependent on the INTC still working at all:
  *
  * Mode A — IRQ fired, CPU received it, but the complete() wakeup was lost
  *   (extremely rare software race).  Detected by the atomic flag set by the
@@ -1087,18 +1108,29 @@ static long pciep_driver_file_ioctl(struct file *file, unsigned int cmd,
  *   only a read by the EP clears it.  So it reliably holds the "interrupt
  *   pending" state regardless of what the host does.
  *
+ * Mode C — Modes A and B both found no evidence via the INTC at all (the
+ *   sustained-freeze failure mode, not just one dropped edge).  Interrupt
+ *   delivery must stay the primary path — this is a last-resort ground-truth
+ *   check, not a replacement for it: poll the TRANSFER_DONE DATA register
+ *   directly (0x88/0x8c), which the host writes independently of whether
+ *   the INTC ever turns that write into a delivered interrupt.  If the host
+ *   genuinely finished the transfer, this still recognises it correctly
+ *   instead of reporting a false failure.  Read-only — the host owns
+ *   clearing/toggling this register ahead of its own next transfer.
+ *
  * @this:       Driver private data
  * @comp:       Completion variable to reinitialise on recovery
  * @fired:      Atomic flag set by the IRQ handler (read_irq_fired / write_irq_fired)
  * @ready_reg:  BUFFER_READY register to clear (0x00 or 0x10)
  * @intr_reg:   INTR register to poll and ack (0xF0 or 0xF4)
+ * @done_reg:   TRANSFER_DONE data register to poll as ground truth (0x88 or 0x8c)
  *
  * Return: true if recovery was performed, false if host has not yet completed.
  */
 static bool pciep_irq_recover(struct pciep_driver_data *this,
 			      struct completion *comp,
 			      atomic_t *fired,
-			      u32 ready_reg, u32 intr_reg)
+			      u32 ready_reg, u32 intr_reg, u32 done_reg)
 {
 	u32 intr_val;
 	u32 value;
@@ -1120,6 +1152,15 @@ static bool pciep_irq_recover(struct pciep_driver_data *this,
 	 * the GIC does not attempt a spurious late delivery. */
 	intr_val = reg_read(this, intr_reg);
 	if (intr_val) {
+		value = reg_read(this, ready_reg);
+		value &= ~SET_BUFFER_RDY;
+		reg_write(this, ready_reg, value);
+		reinit_completion(comp);
+		return true;
+	}
+
+	/* Mode C: last-resort ground-truth poll, independent of the INTC. */
+	if (reg_read(this, done_reg)) {
 		value = reg_read(this, ready_reg);
 		value &= ~SET_BUFFER_RDY;
 		reg_write(this, ready_reg, value);
@@ -1166,7 +1207,7 @@ static ssize_t pciep_driver_file_read(struct file *file, char __user *buff,
     	value |= SET_BUFFER_RDY;
         reg_write(this, PCIEP_READ_BUFFER_READY, value);
 
-	dev_dbg(this->dma_dev,
+	pciep_dbg(this->dma_dev,
 		"[DBG] READ: addr=0x%llx size=%zu READY=0x%08x\n",
 		(u64)this->read_phys_addr[idx], count, value);
 
@@ -1185,30 +1226,58 @@ static ssize_t pciep_driver_file_read(struct file *file, char __user *buff,
 	 * stream early even though all DMA transfers completed successfully.
 	 */
 	{
-		long rem = wait_for_completion_interruptible_timeout(
-				&this->read_complete, msecs_to_jiffies(200));
-		if (rem == 0) {
+		/* Poll in short steps instead of a single 200 ms wait, so a genuine
+		 * completion recognised only via pciep_irq_recover()'s ground-truth
+		 * check is caught within one step of actually happening, rather than
+		 * always waiting out the full 200 ms budget.  The 200 ms outer bound
+		 * for declaring a genuine failure is unchanged. */
+		const long step_ms = 10;
+		const int  max_steps = 200 / step_ms;
+		long rem = 0;
+		bool recovered = false;
+		int step;
+
+		for (step = 0; step < max_steps; step++) {
+			rem = wait_for_completion_interruptible_timeout(
+					&this->read_complete, msecs_to_jiffies(step_ms));
+			if (rem != 0)
+				break;   /* completed normally, or interrupted by signal */
 			if (pciep_irq_recover(this, &this->read_complete,
 					&this->read_irq_fired,
 					PCIEP_READ_BUFFER_READY,
-					PCIRC_READ_BUFFER_TRANSFER_DONE_INTR)) {
-				dev_info_ratelimited(this->dma_dev,
-					"read: IRQ lost — recovered via flag/INTR\n");
-			} else {
-				/* INTR register also 0 — INTC consumed the edge
-				 * without setting INTR or forwarding to GIC.
-				 * DMA is confirmed complete; force recovery now. */
-				dev_warn_ratelimited(this->dma_dev,
-					"read: IRQ lost (INTR=0) — forced 200 ms recovery\n");
-				reinit_completion(&this->read_complete);
-				value = reg_read(this, PCIEP_READ_BUFFER_READY);
-				value &= ~SET_BUFFER_RDY;
-				reg_write(this, PCIEP_READ_BUFFER_READY, value);
+					PCIRC_READ_BUFFER_TRANSFER_DONE_INTR,
+					PCIRC_READ_BUFFER_TRANSFER_DONE)) {
+				recovered = true;
+				break;
 			}
+		}
+
+		if (rem == 0 && recovered) {
+			pciep_dbg_info(this->dma_dev,
+				"read: IRQ lost — recovered after %d ms\n",
+				(step + 1) * (int)step_ms);
+		} else if (rem == 0 && !recovered) {
+			/* INTR register also 0 — INTC consumed the edge
+			 * without setting INTR or forwarding to GIC.
+			 * Unlike the isolated single-drop case above, this has
+			 * also been observed alongside genuine QDMA transfer
+			 * failures (host-side EIO) under sustained load — so,
+			 * unlike Mode A/B above, there is no independent signal
+			 * confirming the DMA actually completed.  Report the
+			 * failure instead of silently returning success, so the
+			 * caller (GStreamer app) can see and count it rather than
+			 * over-counting frames that may never have arrived. */
+			pciep_dbg_warn(this->dma_dev,
+				"read: IRQ lost (INTR=0) — forced 200 ms recovery\n");
+			reinit_completion(&this->read_complete);
+			value = reg_read(this, PCIEP_READ_BUFFER_READY);
+			value &= ~SET_BUFFER_RDY;
+			reg_write(this, PCIEP_READ_BUFFER_READY, value);
+			ret = -ETIMEDOUT;
 		} else if (rem < 0) {
 			pcie_reset_all(this);
 			wmb();
-			dev_dbg(this->dma_dev, "read_complete: interrupted by signal\n");
+			pciep_dbg(this->dma_dev, "read_complete: interrupted by signal\n");
 		}
 	}
 
@@ -1248,33 +1317,56 @@ static ssize_t pciep_driver_file_write(struct file *file,
 	value |= SET_BUFFER_RDY;
 	reg_write(this, PCIEP_WRITE_BUFFER_READY, value);
 
-	dev_dbg(this->dma_dev,
+	pciep_dbg(this->dma_dev,
 		"[DBG] WRITE: addr=0x%llx size=%zu READY=0x%08x\n",
 		(u64)this->write_phys_addr, count, value);
 
 	/* --- 200 ms wait for host C2H completion (same reasoning as file_read) */
 	{
-		long rem = wait_for_completion_interruptible_timeout(
-				&this->write_complete, msecs_to_jiffies(200));
-		if (rem == 0) {
+		/* Poll in short steps instead of a single 200 ms wait -- see the
+		 * matching comment in pciep_driver_file_read(). */
+		const long step_ms = 10;
+		const int  max_steps = 200 / step_ms;
+		long rem = 0;
+		bool recovered = false;
+		int step;
+
+		for (step = 0; step < max_steps; step++) {
+			rem = wait_for_completion_interruptible_timeout(
+					&this->write_complete, msecs_to_jiffies(step_ms));
+			if (rem != 0)
+				break;
 			if (pciep_irq_recover(this, &this->write_complete,
 					&this->write_irq_fired,
 					PCIEP_WRITE_BUFFER_READY,
-					PCIRC_WRITE_BUFFER_TRANSFER_DONE_INTR)) {
-				dev_info_ratelimited(this->dma_dev,
-					"write: IRQ lost — recovered via flag/INTR\n");
-			} else {
-				dev_warn_ratelimited(this->dma_dev,
-					"write: IRQ lost (INTR=0) — forced 200 ms recovery\n");
-				reinit_completion(&this->write_complete);
-				value = reg_read(this, PCIEP_WRITE_BUFFER_READY);
-				value &= ~SET_BUFFER_RDY;
-				reg_write(this, PCIEP_WRITE_BUFFER_READY, value);
+					PCIRC_WRITE_BUFFER_TRANSFER_DONE_INTR,
+					PCIRC_WRITE_BUFFER_TRANSFER_DONE)) {
+				recovered = true;
+				break;
 			}
+		}
+
+		if (rem == 0 && recovered) {
+			pciep_dbg_info(this->dma_dev,
+				"write: IRQ lost — recovered after %d ms\n",
+				(step + 1) * (int)step_ms);
+		} else if (rem == 0 && !recovered) {
+			/* No independent confirmation the DMA completed (see the
+			 * matching comment in pciep_driver_file_read()) — report
+			 * failure instead of silently returning success, so the
+			 * app doesn't over-count frames that may never have reached
+			 * the host. */
+			pciep_dbg_warn(this->dma_dev,
+				"write: IRQ lost (INTR=0) — forced 200 ms recovery\n");
+			reinit_completion(&this->write_complete);
+			value = reg_read(this, PCIEP_WRITE_BUFFER_READY);
+			value &= ~SET_BUFFER_RDY;
+			reg_write(this, PCIEP_WRITE_BUFFER_READY, value);
+			ret = -ETIMEDOUT;
 		} else if (rem < 0) {
 			pcie_reset_all(this);
 			wmb();
-			dev_dbg(this->dma_dev, "write_complete: interrupted by signal\n");
+			pciep_dbg(this->dma_dev, "write_complete: interrupted by signal\n");
 		}
 	}
 	return ret ? ret : (ssize_t)count;

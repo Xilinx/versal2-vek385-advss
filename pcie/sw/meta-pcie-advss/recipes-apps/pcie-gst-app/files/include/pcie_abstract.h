@@ -47,6 +47,26 @@
 
 #define DEVICE_NAME             "/dev/pciep0"
 
+/* Single switch for all pcie_gst_app diagnostic prints (per-transfer
+ * read/write failure traces, periodic throughput logs, verbose exit
+ * summaries). Flip to 1 for a debug build, or pass -DPCIE_APP_DEBUG_PRINTS=1
+ * on the compiler command line; keep 0 for production. */
+#ifndef PCIE_APP_DEBUG_PRINTS
+#define PCIE_APP_DEBUG_PRINTS 0
+#endif
+
+#if PCIE_APP_DEBUG_PRINTS
+#define PCIE_APP_DBG_ERROR(...) GST_ERROR(__VA_ARGS__)
+#define PCIE_APP_DBG_PRINT(...) g_print(__VA_ARGS__)
+#else
+/* "if (0) real_call(...)" (not a bare no-op) so arguments are still
+ * type-checked and referenced -- avoids -Wunused-variable on values that
+ * are only ever used inside these debug calls. Dead branch, zero cost. */
+#define PCIE_APP_DBG_ERROR(...) do { if (0) GST_ERROR(__VA_ARGS__); } while (0)
+#define PCIE_APP_DBG_PRINT(...) do { if (0) g_print(__VA_ARGS__); } while (0)
+#endif
+
+
 /*
  * ============================================================================
  * EP DMA BUFFER POOL DEPTH

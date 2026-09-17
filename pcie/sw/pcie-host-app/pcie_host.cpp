@@ -77,7 +77,12 @@
 #define KRED "\x1B[31m"
 #define RESET "\x1B[0m"
 
-/* #define T_DEBUG */  /* Uncomment to enable per-30-frame FPS counters in DMA threads */
+/* T_DEBUG (per-30-frame FPS counters in the DMA threads) now follows the
+ * single PCIE_HOST_DEBUG_PRINTS switch (pcie_host.h) instead of its own
+ * separate toggle. */
+#if PCIE_HOST_DEBUG_PRINTS
+#define T_DEBUG
+#endif
 #define FAILURE -1
 
 //Planes Multiplier
@@ -548,7 +553,7 @@ int cb_init(circular_buffer *cb, size_t capacity, size_t sz)
 	cb->drop_count = 0;
 	pthread_mutex_init(&cb->lock, NULL);
 
-	printf("[cb_init] capacity=%zu frames, frame_sz=%zu bytes, total=%zu KB\n",
+	PCIE_HOST_DBG_PRINT("[cb_init] capacity=%zu frames, frame_sz=%zu bytes, total=%zu KB\n",
 		capacity, sz, (capacity * sz) / 1024);
 	return 0;
 }
@@ -559,7 +564,7 @@ int cb_enque(circular_buffer *cb, char *data)
 	if (cb->index == cb->capacity) {
 		cb->drop_count++;
 		if (cb->drop_count % 30 == 1)
-			printf("[cb_enque] WARN: buffer full (cap=%zu), frame dropped "
+			PCIE_HOST_DBG_PRINT("[cb_enque] WARN: buffer full (cap=%zu), frame dropped "
 			       "total_drops=%zu\n", cb->capacity, cb->drop_count);
 		pthread_mutex_unlock(&cb->lock);
 		return 1;
@@ -704,28 +709,33 @@ static void qdma_reset(void)
 	size_t cmd_len = strlen(g_dmactl) + strlen(g_qdma_dev) + 64;
 	char *cmd = (char *)malloc(cmd_len);
 	if (!cmd) {
-		printf("[qdma_reset] ERROR: out of memory — queues not reset\n");
+		PCIE_HOST_DBG_PRINT("[qdma_reset] ERROR: out of memory — queues not reset\n");
 		return;
 	}
-	printf("[qdma_reset] Resetting QDMA queues...\n");
+	PCIE_HOST_DBG_PRINT("[qdma_reset] Resetting QDMA queues...\n");
+
+	/* dma-ctl prints its own status directly to stdout/stderr — redirect
+	 * both to /dev/null unless debug prints are enabled, so its output
+	 * follows the same single macro as everything else. */
+	const char *redir = PCIE_HOST_DEBUG_PRINTS ? "" : " >/dev/null 2>&1";
 
 	/* Stop both queues to flush pending descriptors */
-	snprintf(cmd, cmd_len, "%s %s q stop idx 0 dir h2c 2>/dev/null", g_dmactl, g_qdma_dev);
+	snprintf(cmd, cmd_len, "%s %s q stop idx 0 dir h2c%s", g_dmactl, g_qdma_dev, redir);
 	system(cmd);
-	snprintf(cmd, cmd_len, "%s %s q stop idx 1 dir c2h 2>/dev/null", g_dmactl, g_qdma_dev);
+	snprintf(cmd, cmd_len, "%s %s q stop idx 1 dir c2h%s", g_dmactl, g_qdma_dev, redir);
 	system(cmd);
 
 	/* Restart with fresh descriptor rings */
 	int r = 0;
-	snprintf(cmd, cmd_len, "%s %s q start idx 0 dir h2c", g_dmactl, g_qdma_dev);
+	snprintf(cmd, cmd_len, "%s %s q start idx 0 dir h2c%s", g_dmactl, g_qdma_dev, redir);
 	r |= system(cmd);
-	snprintf(cmd, cmd_len, "%s %s q start idx 1 dir c2h", g_dmactl, g_qdma_dev);
+	snprintf(cmd, cmd_len, "%s %s q start idx 1 dir c2h%s", g_dmactl, g_qdma_dev, redir);
 	r |= system(cmd);
 
 	if (r == 0)
-		printf("[qdma_reset] QDMA queues reset — ready for next run\n");
+		PCIE_HOST_DBG_PRINT("[qdma_reset] QDMA queues reset — ready for next run\n");
 	else
-		printf("[qdma_reset] WARNING: dma-ctl errors (rc=%d) — "
+		PCIE_HOST_DBG_PRINT("[qdma_reset] WARNING: dma-ctl errors (rc=%d) — "
 		       "check '%s' exists and syntax matches your QDMA driver\n", r, g_dmactl);
 	free(cmd);
 }
@@ -837,7 +847,6 @@ int mipi_displayonhost(struct MainWindow *frm,const char *c2h_device)
 	volatile unsigned int *input_res = NULL;
 	volatile unsigned int *ucase_params;
 	volatile unsigned int *fps_mode_params;
-	int choice;
 	pthread_t  thread3;
 	bool did_dma = false;
 
@@ -939,7 +948,7 @@ int mipi_displayonhost(struct MainWindow *frm,const char *c2h_device)
 	if (rc < 0)
 		goto reg_unmap;
 
-	printf("[mipi_displayonhost] queue_frame: %d frames × %zu bytes\n",
+	PCIE_HOST_DBG_PRINT("[mipi_displayonhost] queue_frame: %d frames × %zu bytes\n",
 		HOST_DISPLAY_RING_DEPTH, frame_bytes(in_width, in_height));
 
 	did_dma = true;
@@ -952,7 +961,7 @@ int mipi_displayonhost(struct MainWindow *frm,const char *c2h_device)
 	app_running = false;
 	while (queue_frame.index)
 		sched_yield();
-	printf("[mipi_displayonhost] Queue drained, signalling host done\n");
+	PCIE_HOST_DBG_PRINT("[mipi_displayonhost] Queue drained, signalling host done\n");
 	host_done = ((uint32_t *)(trans.map_base + PCIRC_HOST_DONE));
 	*host_done = 0x1;
 	/* Signal EP to stop so host_app_reg_read calls g_main_loop_quit */
@@ -995,7 +1004,6 @@ int host2host_without_filter(struct MainWindow *frm, const char *h2c_device, con
 	volatile unsigned int *input_res = NULL;
 	volatile unsigned int *fps_mode_params;
 	char infilename[100];
-	int choice = 2;   /* default FHD if fgets fails */
 	volatile unsigned int *ucase_params;
 	pthread_t thread1, thread2, thread3;
 	bool did_dma = false;
@@ -1031,6 +1039,9 @@ int host2host_without_filter(struct MainWindow *frm, const char *h2c_device, con
 	app_running = true;
 	frm->getVidFrame0()->setResolution(in_width,in_height,30);
 	frm->getVidFrame0()->config_frame();
+
+	printf("[host2board_displayonhost] Starting: %dx%d @ %d fps, usecase=2\n",
+		in_width, in_height, fps);
 
 	trans.h2c_fd = open(h2c_device, O_RDWR);
 	if (trans.h2c_fd < 0) {
@@ -1314,6 +1325,9 @@ void *pcie_dma_read(void *)
 	volatile uint64_t addr;
 	char *read_allocated = NULL;
 	cpu_set_t cpuset;
+	/* First arm-wait includes EP/GStreamer pipeline startup latency (can be
+	 * several seconds) — report it once, separately from steady-state waits. */
+	bool first_arm_wait = true;
 #ifdef T_DEBUG
 	struct timespec ts_start, ts_end;
 	int k = 0;
@@ -1376,14 +1390,42 @@ void *pcie_dma_read(void *)
 				 * (which is what clears 0xef to 0 in open()). */
 				if ((read_complete == 0xef && g_h2c_seen_ready) || !app_running)
 					break;
-				sched_yield();  /* do not starve other threads */
+				/* Below 150 ms: unchanged sched_yield(), zero risk to normal per-frame
+				 * timing.  Above 150 ms we're already in a confirmed stall (same bar
+				 * used for STALL logging below), so usleep()'s ~10 ms granularity on
+				 * this target (see repo memory: nanosleep is tick-bound here, NOT
+				 * microsecond-precise) is a negligible fraction of an already-long
+				 * wait, and cuts CPU spin during genuine stalls. */
+				{
+					struct timespec now_ts;
+					clock_gettime(CLOCK_MONOTONIC, &now_ts);
+					double waited_ms = (now_ts.tv_sec - poll_t0.tv_sec) * 1000.0
+						+ (now_ts.tv_nsec - poll_t0.tv_nsec) / 1e6;
+					if (waited_ms > 150.0)
+						usleep(2000);
+					else
+						sched_yield();  /* do not starve other threads */
+				}
 			}
 			clock_gettime(CLOCK_MONOTONIC, &poll_t1);
 			double poll_ms = (poll_t1.tv_sec - poll_t0.tv_sec) * 1000.0
 				+ (poll_t1.tv_nsec - poll_t0.tv_nsec) / 1e6;
-			if (poll_ms > 50.0)
-				printf("[T+%7.3f] [pcie_dma_read] STALL: waited %.1f ms for EP READ READY=1\n",
+			if (first_arm_wait) {
+				/* One-time EP/GStreamer pipeline negotiation latency before the
+				 * first buffer is armed — not a per-frame stall. */
+				PCIE_HOST_DBG_PRINT("[T+%7.3f] [pcie_dma_read] EP pipeline startup: first READ buffer "
+				       "armed after %.1f ms (one-time)\n", host_now_s(), poll_ms);
+				first_arm_wait = false;
+			} else if (poll_ms > 150.0) {
+				/* ~50-150 ms waits here are normal: the 6-buffer EP pool lets a
+				 * few frames arm back-to-back, then briefly waits for the real-time
+				 * 30 fps consumer to free a slot — this nets out to the correct fps
+				 * and is not logged.  Only log waits beyond 150 ms, the same
+				 * threshold this code already treats as a genuine IRQ/EP issue
+				 * elsewhere (see the retrigger logic below). */
+				PCIE_HOST_DBG_PRINT("[T+%7.3f] [pcie_dma_read] STALL: waited %.1f ms for EP READ READY=1\n",
 				       host_now_s(), poll_ms);
+			}
 		}
 		/* Record that at least one buffer was armed this run so subsequent
 		 * 0xef checks are treated as genuine end-of-stream. */
@@ -1414,41 +1456,49 @@ void *pcie_dma_read(void *)
 		rc = write_from_buffer((char *)H2C_DEVICE, trans.h2c_fd, trans.read_buffer, size, addr);
 		if (rc < 0) {
 			/* H2C QDMA error — close and reopen the device to reset the QDMA
-			 * H2C queue state.  After a 10-second QDMA timeout the hardware
-			 * descriptor ring is corrupted; reopening the fd triggers the driver's
-			 * queue-stop / queue-start path which clears the error state. */
-			printf("[pcie_dma_read] H2C EIO (addr=0x%llx) — reopening QDMA H2C device\n",
-			       (unsigned long long)addr);
-			close(trans.h2c_fd);
-			trans.h2c_fd = open(H2C_DEVICE, O_RDWR);
-			if (trans.h2c_fd < 0) {
-				printf("[pcie_dma_read] H2C reopen failed: %s\n", strerror(errno));
-				trans.h2c_fd = -1;
-				goto h2c_fatal;
+			 * H2C queue state, retrying up to QDMA_EIO_MAX_RETRIES times.
+			 * A single retry is not always enough to clear the known
+			 * intermittent QDMA soft IP fault (D6); each attempt re-runs
+			 * the full close/reopen cycle, which is what actually resets
+			 * the driver's queue state. */
+			int attempt;
+			for (attempt = 1; attempt <= QDMA_EIO_MAX_RETRIES; attempt++) {
+				PCIE_HOST_DBG_PRINT("[pcie_dma_read] H2C EIO (addr=0x%llx) — reopening QDMA "
+				       "H2C device (attempt %d/%d)\n",
+				       (unsigned long long)addr, attempt, QDMA_EIO_MAX_RETRIES);
+				close(trans.h2c_fd);
+				trans.h2c_fd = open(H2C_DEVICE, O_RDWR);
+				if (trans.h2c_fd < 0) {
+					PCIE_HOST_DBG_PRINT("[pcie_dma_read] H2C reopen failed: %s\n", strerror(errno));
+					trans.h2c_fd = -1;
+					break;   /* can't even reopen — no point retrying further */
+				}
+				rc = write_from_buffer((char *)H2C_DEVICE, trans.h2c_fd, trans.read_buffer, size, addr);
+				if (rc >= 0) {
+					PCIE_HOST_DBG_PRINT("[pcie_dma_read] H2C recovery successful "
+					       "(attempt %d/%d)\n", attempt, QDMA_EIO_MAX_RETRIES);
+					break;
+				}
+				PCIE_HOST_DBG_PRINT("[pcie_dma_read] H2C still failed (attempt %d/%d): rc=%d\n",
+				       attempt, QDMA_EIO_MAX_RETRIES, rc);
 			}
-			rc = write_from_buffer((char *)H2C_DEVICE, trans.h2c_fd, trans.read_buffer, size, addr);
-			if (rc < 0) {
-				printf("[pcie_dma_read] H2C still failed after reopen: rc=%d\n", rc);
-				goto h2c_fatal;
-			}
-			printf("[pcie_dma_read] H2C recovery successful\n");
 		}
 		if (rc < 0) {
-		h2c_fatal:
-			/* QDMA H2C hardware is permanently stuck — a simple fd reopen did not
-			 * clear the error.  The hardware descriptor ring needs a PCIe reset.
-			 * Stop all threads immediately (set app_running=false) and signal the
-			 * EP to exit so everything unwinds cleanly instead of hanging at
-			 * 0.066 fps on read_complete timeouts.
+			/* QDMA H2C hardware is permanently stuck — repeated close/reopen
+			 * attempts did not clear the error.  The hardware descriptor ring
+			 * needs a PCIe reset.  Stop all threads immediately (set
+			 * app_running=false) and signal the EP to exit so everything
+			 * unwinds cleanly instead of hanging at 0.066 fps on
+			 * read_complete timeouts.
 			 *
 			 * To recover before the next run, on the HOST run ONE of:
 			 *   echo 1 > /sys/bus/pci/devices/0000:c1:00.0/reset
 			 *   sudo rmmod qdma-pf && sudo insmod /path/to/qdma-pf.ko
 			 */
-			printf("\n[pcie_dma_read] FATAL: QDMA H2C hardware needs reset.\n");
-			printf("[pcie_dma_read] Run on HOST to recover:\n");
-			printf("[pcie_dma_read]   echo 1 > /sys/bus/pci/devices/0000:c1:00.0/reset\n");
-			printf("[pcie_dma_read]   OR: sudo rmmod qdma-pf && sudo insmod qdma-pf.ko\n\n");
+			PCIE_HOST_DBG_PRINT("\n[pcie_dma_read] FATAL: QDMA H2C hardware needs reset.\n");
+			PCIE_HOST_DBG_PRINT("[pcie_dma_read] Run on HOST to recover:\n");
+			PCIE_HOST_DBG_PRINT("[pcie_dma_read]   echo 1 > /sys/bus/pci/devices/0000:c1:00.0/reset\n");
+			PCIE_HOST_DBG_PRINT("[pcie_dma_read]   OR: sudo rmmod qdma-pf && sudo insmod qdma-pf.ko\n\n");
 			/* Signal EP to stop → host_app_reg_read detects it → g_main_loop_quit() */
 			if (trans.map_base && trans.map_base != (char *)-1)
 				*((volatile uint32_t *)(trans.map_base + PCIEP_SET_SIG)) = 0x1;
@@ -1498,7 +1548,7 @@ void *pcie_dma_read(void *)
 					+ (tnow.tv_nsec - retrigger_ref.tv_nsec) / 1e6;
 				if (retry_ms > 150.0) {
 					retrigger_count++;
-					printf("[T+%7.3f] [pcie_dma_read] IRQ lost: retrigger #%d "
+					PCIE_HOST_DBG_PRINT("[T+%7.3f] [pcie_dma_read] IRQ lost: retrigger #%d "
 					       "after %.0f ms — re-firing READ TRANSFER_DONE\n",
 					       host_now_s(), retrigger_count, retry_ms);
 					/* Force 0→1 transition: write 0, flush, brief gap,
@@ -1523,12 +1573,14 @@ void *pcie_dma_read(void *)
 				if (read_complete == 0xef && (retrigger_count > 0 || total_ms > 200.0)) break;
 				sched_yield();
 			}
+			/* 150 ms matches the retrigger threshold above — normal IRQ clears
+			 * complete in <1 ms, so only a wait this long reflects a real issue. */
 			clock_gettime(CLOCK_MONOTONIC, &clr_t1);
 			double clr_ms = (clr_t1.tv_sec - clr_t0.tv_sec) * 1000.0
 				+ (clr_t1.tv_nsec - clr_t0.tv_nsec) / 1e6;
-			if (clr_ms > 50.0)
-				printf("[T+%7.3f] [pcie_dma_read] STALL: waited %.1f ms for "
-				       "EP READ READY\u21920%s\n",
+			if (clr_ms > 150.0)
+				PCIE_HOST_DBG_PRINT("[T+%7.3f] [pcie_dma_read] STALL: waited %.1f ms for "
+				       "EP READ READY→0%s\n",
 				       host_now_s(), clr_ms,
 				       retrigger_count ? " [IRQ retriggered]" : " (IRQ)");
 		}
@@ -1554,6 +1606,9 @@ void  *pcie_dma_write(void *)
 	char *write_allocated = NULL;
 	int num_cpu;
 	cpu_set_t cpuset;
+	/* First arm-wait includes EP/GStreamer pipeline startup latency (can be
+	 * several seconds) — report it once, separately from steady-state waits. */
+	bool first_arm_wait = true;
 #ifdef T_DEBUG
 	struct timespec ts_start, ts_end;
 	int k = 0;
@@ -1606,14 +1661,39 @@ void  *pcie_dma_write(void *)
 				if ((write_complete == 0xef && g_c2h_seen_ready) || !app_running) {
 					break;
 				}
-				sched_yield();  /* do not starve Qt render thread */
+				/* Same threshold-gated spin/sleep as the H2C arm-wait — see comment
+				 * there and repo memory for why usleep() must only be used once
+				 * we're already past 150 ms (a confirmed stall), not on every poll. */
+				{
+					struct timespec now_ts;
+					clock_gettime(CLOCK_MONOTONIC, &now_ts);
+					double waited_ms = (now_ts.tv_sec - poll_t0.tv_sec) * 1000.0
+						+ (now_ts.tv_nsec - poll_t0.tv_nsec) / 1e6;
+					if (waited_ms > 150.0)
+						usleep(2000);
+					else
+						sched_yield();  /* do not starve Qt render thread */
+				}
 			}
 			clock_gettime(CLOCK_MONOTONIC, &poll_t1);
 			double poll_ms = (poll_t1.tv_sec - poll_t0.tv_sec) * 1000.0
 				+ (poll_t1.tv_nsec - poll_t0.tv_nsec) / 1e6;
-			if (poll_ms > 50.0)
-				printf("[T+%7.3f] [pcie_dma_write] STALL: waited %.1f ms for EP WRITE READY=1\n",
+			if (first_arm_wait) {
+				/* One-time EP/GStreamer pipeline negotiation latency before the
+				 * first buffer is armed — not a per-frame stall. */
+				PCIE_HOST_DBG_PRINT("[T+%7.3f] [pcie_dma_write] EP pipeline startup: first WRITE buffer "
+				       "armed after %.1f ms (one-time)\n", host_now_s(), poll_ms);
+				first_arm_wait = false;
+			} else if (poll_ms > 150.0) {
+				/* ~50-150 ms waits here are normal: the 6-buffer EP pool lets a
+				 * few frames arm back-to-back, then briefly waits for the real-time
+				 * 30 fps consumer to free a slot — this nets out to the correct fps
+				 * and is not logged.  Only log waits beyond 150 ms, the same
+				 * threshold this code already treats as a genuine IRQ/EP issue
+				 * elsewhere (see the retrigger logic below). */
+				PCIE_HOST_DBG_PRINT("[T+%7.3f] [pcie_dma_write] STALL: waited %.1f ms for EP WRITE READY=1\n",
 				       host_now_s(), poll_ms);
+			}
 		}
 		if (write_buffer_ready & 0x1) g_c2h_seen_ready = true;
 		if ((write_complete == 0xef && g_c2h_seen_ready) || !app_running) {
@@ -1636,41 +1716,49 @@ void  *pcie_dma_write(void *)
 			rc = read_to_buffer((char *)C2H_DEVICE, trans.c2h_fd, trans.write_buffer, size, addr);
 			if (rc < 0) {
 				/* C2H QDMA error — close and reopen the device to reset the QDMA
-				 * C2H queue state.  After a 10-second QDMA timeout the hardware
-				 * descriptor ring is corrupted; reopening the fd triggers the driver's
-				 * queue-stop / queue-start path which clears the error state. */
-				printf("[pcie_dma_write] C2H EIO (addr=0x%llx) — reopening QDMA C2H device\n",
-				       (unsigned long long)addr);
-				close(trans.c2h_fd);
-				trans.c2h_fd = open(C2H_DEVICE, O_RDWR);
-				if (trans.c2h_fd < 0) {
-					printf("[pcie_dma_write] C2H reopen failed: %s\n", strerror(errno));
-					trans.c2h_fd = -1;
-					goto c2h_fatal;
+				 * C2H queue state, retrying up to QDMA_EIO_MAX_RETRIES times.
+				 * A single retry is not always enough to clear the known
+				 * intermittent QDMA soft IP fault (D6); each attempt re-runs
+				 * the full close/reopen cycle, which is what actually resets
+				 * the driver's queue state. */
+				int attempt;
+				for (attempt = 1; attempt <= QDMA_EIO_MAX_RETRIES; attempt++) {
+					PCIE_HOST_DBG_PRINT("[pcie_dma_write] C2H EIO (addr=0x%llx) — reopening QDMA "
+					       "C2H device (attempt %d/%d)\n",
+					       (unsigned long long)addr, attempt, QDMA_EIO_MAX_RETRIES);
+					close(trans.c2h_fd);
+					trans.c2h_fd = open(C2H_DEVICE, O_RDWR);
+					if (trans.c2h_fd < 0) {
+						PCIE_HOST_DBG_PRINT("[pcie_dma_write] C2H reopen failed: %s\n", strerror(errno));
+						trans.c2h_fd = -1;
+						break;   /* can't even reopen — no point retrying further */
+					}
+					rc = read_to_buffer((char *)C2H_DEVICE, trans.c2h_fd, trans.write_buffer, size, addr);
+					if (rc >= 0) {
+						PCIE_HOST_DBG_PRINT("[pcie_dma_write] C2H recovery successful "
+						       "(attempt %d/%d)\n", attempt, QDMA_EIO_MAX_RETRIES);
+						break;
+					}
+					PCIE_HOST_DBG_PRINT("[pcie_dma_write] C2H still failed (attempt %d/%d): rc=%d\n",
+					       attempt, QDMA_EIO_MAX_RETRIES, rc);
 				}
-				rc = read_to_buffer((char *)C2H_DEVICE, trans.c2h_fd, trans.write_buffer, size, addr);
-				if (rc < 0) {
-					printf("[pcie_dma_write] C2H still failed after reopen: rc=%d\n", rc);
-					goto c2h_fatal;
-				}
-				printf("[pcie_dma_write] C2H recovery successful\n");
 			}
 			if (rc < 0) {
-			c2h_fatal:
-				/* QDMA C2H hardware is permanently stuck — a simple fd reopen did not
-				 * clear the error.  The hardware descriptor ring needs a PCIe reset.
-				 * Stop all threads immediately (set app_running=false) and signal the
-				 * EP to exit so everything unwinds cleanly instead of hanging at
-				 * 0.066 fps on write_complete timeouts.
+				/* QDMA C2H hardware is permanently stuck — repeated close/reopen
+				 * attempts did not clear the error.  The hardware descriptor ring
+				 * needs a PCIe reset.  Stop all threads immediately (set
+				 * app_running=false) and signal the EP to exit so everything
+				 * unwinds cleanly instead of hanging at 0.066 fps on
+				 * write_complete timeouts.
 				 *
 				 * To recover before the next run, on the HOST run ONE of:
 				 *   echo 1 > /sys/bus/pci/devices/0000:c1:00.0/reset
 				 *   sudo rmmod qdma-pf && sudo insmod /path/to/qdma-pf.ko
 				 */
-				printf("\n[pcie_dma_write] FATAL: QDMA C2H hardware needs reset.\n");
-				printf("[pcie_dma_write] Run on HOST to recover:\n");
-				printf("[pcie_dma_write]   echo 1 > /sys/bus/pci/devices/0000:c1:00.0/reset\n");
-				printf("[pcie_dma_write]   OR: sudo rmmod qdma-pf && sudo insmod qdma-pf.ko\n\n");
+				PCIE_HOST_DBG_PRINT("\n[pcie_dma_write] FATAL: QDMA C2H hardware needs reset.\n");
+				PCIE_HOST_DBG_PRINT("[pcie_dma_write] Run on HOST to recover:\n");
+				PCIE_HOST_DBG_PRINT("[pcie_dma_write]   echo 1 > /sys/bus/pci/devices/0000:c1:00.0/reset\n");
+				PCIE_HOST_DBG_PRINT("[pcie_dma_write]   OR: sudo rmmod qdma-pf && sudo insmod qdma-pf.ko\n\n");
 				/* Signal EP to stop → host_app_reg_read detects it → g_main_loop_quit() */
 				if (trans.map_base && trans.map_base != (char *)-1)
 					*((volatile uint32_t *)(trans.map_base + PCIEP_SET_SIG)) = 0x1;
@@ -1680,11 +1768,9 @@ void  *pcie_dma_write(void *)
 			}
 
 			int enq_rc = cb_enque(&queue_frame, trans.write_buffer);
-#ifdef T_DEBUG
 			if (enq_rc != 0)
-				printf("[pcie_dma_write] WARNING: cb_enque failed frame#%d "
-				       "(total_drops=%zu)\n", k, queue_frame.drop_count);
-#endif
+				printf("[pcie_dma_write] WARNING: cb_enque failed "
+				       "(total_drops=%zu)\n", queue_frame.drop_count);
 		}
 #ifdef T_DEBUG
 		if(k==30){
@@ -1715,7 +1801,7 @@ void  *pcie_dma_write(void *)
 					+ (tnow.tv_nsec - retrigger_ref.tv_nsec) / 1e6;
 				if (retry_ms > 150.0) {
 					retrigger_count++;
-					printf("[T+%7.3f] [pcie_dma_write] IRQ lost: retrigger #%d "
+					PCIE_HOST_DBG_PRINT("[T+%7.3f] [pcie_dma_write] IRQ lost: retrigger #%d "
 					       "after %.0f ms — re-firing WRITE TRANSFER_DONE\n",
 					       host_now_s(), retrigger_count, retry_ms);
 					*transfer_done = 0x0;
@@ -1732,18 +1818,27 @@ void  *pcie_dma_write(void *)
 				if (write_complete == 0xef && (retrigger_count > 0 || total_ms > 200.0)) break;
 				sched_yield();  /* do not starve other threads */
 			}
+			/* 150 ms matches the retrigger threshold above — normal IRQ clears
+			 * complete in <1 ms, so only a wait this long reflects a real issue. */
 			clock_gettime(CLOCK_MONOTONIC, &clr_t1);
 			double clr_ms = (clr_t1.tv_sec - clr_t0.tv_sec) * 1000.0
 				+ (clr_t1.tv_nsec - clr_t0.tv_nsec) / 1e6;
-			if (clr_ms > 50.0)
-				printf("[T+%7.3f] [pcie_dma_write] STALL: waited %.1f ms for "
-				       "EP WRITE READY\u21920%s\n",
+			if (clr_ms > 150.0)
+				PCIE_HOST_DBG_PRINT("[T+%7.3f] [pcie_dma_write] STALL: waited %.1f ms for "
+				       "EP WRITE READY→0%s\n",
 				       host_now_s(), clr_ms,
 				       retrigger_count ? " [IRQ retriggered]" : " (IRQ)");
 		}
 	}
 out:
 	printf("** Write done\n");
+	/* Unthrottled, always printed — confirms whether cb_enque() silently
+	 * dropped C2H frames into queue_frame (never retried, by design, so
+	 * the display can never block the DMA thread) instead of every 30th
+	 * drop only, which can hide a real gap between EP frames sent and
+	 * frames actually displayed. */
+	PCIE_HOST_DBG_PRINT("[pcie_dma_write] queue_frame total_drops=%zu (frames received via C2H but "
+	       "never handed to display because the ring was full)\n", queue_frame.drop_count);
 	if (write_allocated) {
 		free(write_allocated);
 		write_allocated = NULL;

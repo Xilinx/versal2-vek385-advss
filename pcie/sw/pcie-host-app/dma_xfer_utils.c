@@ -81,22 +81,25 @@ ssize_t read_to_buffer(char *fname, int fd, char *buffer, uint64_t size,
 		if (offset) {
 			rc = lseek(fd, offset, SEEK_SET);
 			if (rc < 0) {
-				fprintf(stderr,
-					"%s, seek off 0x%lx failed %zd.\n",
-					fname, offset, rc);
-				perror("seek file");
-				/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
-				printf("[TIMING] read_to_buffer(%s): %.3f ms (early exit)\n",
-					fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
+				if (PCIE_HOST_DEBUG_PRINTS) {
+					fprintf(stderr,
+						"%s, seek off 0x%lx failed %zd.\n",
+						fname, offset, rc);
+					perror("seek file");
+				}
+				clock_gettime(CLOCK_MONOTONIC, &ts_end);
+				PCIE_HOST_DBG_PRINT("[TIMING] read_to_buffer(%s): %.3f ms (early exit)\n",
+					fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0);
 				return -EIO;
 			}
 			if (rc != offset) {
-				fprintf(stderr,
-					"%s, seek off 0x%lx != 0x%lx.\n",
-					fname, rc, offset);
-				/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
-				printf("[TIMING] read_to_buffer(%s): %.3f ms (early exit)\n",
-					fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
+				if (PCIE_HOST_DEBUG_PRINTS)
+					fprintf(stderr,
+						"%s, seek off 0x%lx != 0x%lx.\n",
+						fname, rc, offset);
+				clock_gettime(CLOCK_MONOTONIC, &ts_end);
+				PCIE_HOST_DBG_PRINT("[TIMING] read_to_buffer(%s): %.3f ms (early exit)\n",
+					fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0);
 				return -EIO;
 			}
 		}
@@ -104,22 +107,25 @@ ssize_t read_to_buffer(char *fname, int fd, char *buffer, uint64_t size,
 		/* read data from file into memory buffer */
 		rc = read(fd, buf, bytes);
 		if (rc < 0) {
-			fprintf(stderr,
-				"%s, read off 0x%lx + 0x%lx failed %zd.\n",
-				fname, offset, bytes, rc);
-			perror("read file");
-			/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
-			printf("[TIMING] read_to_buffer(%s): %.3f ms (early exit)\n",
-				fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
+			if (PCIE_HOST_DEBUG_PRINTS) {
+				fprintf(stderr,
+					"%s, read off 0x%lx + 0x%lx failed %zd.\n",
+					fname, offset, bytes, rc);
+				perror("read file");
+			}
+			clock_gettime(CLOCK_MONOTONIC, &ts_end);
+			PCIE_HOST_DBG_PRINT("[TIMING] read_to_buffer(%s): %.3f ms (early exit)\n",
+				fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0);
 			return -EIO;
 		}
 		if (rc != bytes) {
-			fprintf(stderr,
-				"%s, R off 0x%lx, 0x%lx != 0x%lx.\n",
-				fname, count, rc, bytes);
-			/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
-			printf("[TIMING] read_to_buffer(%s): %.3f ms (early exit)\n",
-				fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
+			if (PCIE_HOST_DEBUG_PRINTS)
+				fprintf(stderr,
+					"%s, R off 0x%lx, 0x%lx != 0x%lx.\n",
+					fname, count, rc, bytes);
+			clock_gettime(CLOCK_MONOTONIC, &ts_end);
+			PCIE_HOST_DBG_PRINT("[TIMING] read_to_buffer(%s): %.3f ms (early exit)\n",
+				fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0);
 			return -EIO;
 		}
 
@@ -129,18 +135,18 @@ ssize_t read_to_buffer(char *fname, int fd, char *buffer, uint64_t size,
 	} while (count < size);
 
 	if (count != size) {
-		fprintf(stderr, "%s, R failed 0x%lx != 0x%lx.\n",
-				fname, count, size);
-		/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
-		printf("[TIMING] read_to_buffer(%s): %.3f ms (early exit)\n",
-			fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
+		if (PCIE_HOST_DEBUG_PRINTS)
+			fprintf(stderr, "%s, R failed 0x%lx != 0x%lx.\n",
+					fname, count, size);
+		clock_gettime(CLOCK_MONOTONIC, &ts_end);
+		PCIE_HOST_DBG_PRINT("[TIMING] read_to_buffer(%s): %.3f ms (early exit)\n",
+			fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0);
 		return -EIO;
 	}
 
 	clock_gettime(CLOCK_MONOTONIC, &ts_end);
-	/* [TIMING debug] Uncomment to log per-frame DMA read latency:
-	printf("[TIMING] read_to_buffer(%s): %.3f ms\n",
-		fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
+	PCIE_HOST_DBG_PRINT("[TIMING] read_to_buffer(%s): %.3f ms\n",
+		fname, ELAPSED_NS(ts_start, ts_end) / 1000000.0);
 	return count;
 }
 
@@ -164,22 +170,25 @@ ssize_t write_from_buffer(char *fname, int fd, char *buffer, uint64_t size,
 		if (offset) {
 			rc = lseek(fd, offset, SEEK_SET);
 			if (rc < 0) {
-				fprintf(stderr,
-					"%s, seek off 0x%lx failed %zd.\n",
-					fname, offset, rc);
-				perror("seek file");
-				/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
-				printf("[TIMING] write_from_buffer: %.3f ms (early exit)\n",
-					ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
+				if (PCIE_HOST_DEBUG_PRINTS) {
+					fprintf(stderr,
+						"%s, seek off 0x%lx failed %zd.\n",
+						fname, offset, rc);
+					perror("seek file");
+				}
+				clock_gettime(CLOCK_MONOTONIC, &ts_end);
+				PCIE_HOST_DBG_PRINT("[TIMING] write_from_buffer: %.3f ms (early exit)\n",
+					ELAPSED_NS(ts_start, ts_end) / 1000000.0);
 				return -EIO;
 			}
 			if (rc != offset) {
-				fprintf(stderr,
-					"%s, seek off 0x%lx != 0x%lx.\n",
-					fname, rc, offset);
-				/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
-				printf("[TIMING] write_from_buffer: %.3f ms (early exit)\n",
-					ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
+				if (PCIE_HOST_DEBUG_PRINTS)
+					fprintf(stderr,
+						"%s, seek off 0x%lx != 0x%lx.\n",
+						fname, rc, offset);
+				clock_gettime(CLOCK_MONOTONIC, &ts_end);
+				PCIE_HOST_DBG_PRINT("[TIMING] write_from_buffer: %.3f ms (early exit)\n",
+					ELAPSED_NS(ts_start, ts_end) / 1000000.0);
 				return -EIO;
 			}
 		}
@@ -187,20 +196,23 @@ ssize_t write_from_buffer(char *fname, int fd, char *buffer, uint64_t size,
 		/* write data to file from memory buffer */
 		rc = write(fd, buf, bytes);
 		if (rc < 0) {
-			fprintf(stderr, "%s, W off 0x%lx, 0x%lx failed %zd.\n",
-				fname, offset, bytes, rc);
-			perror("write file");
-			/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
-			printf("[TIMING] write_from_buffer: %.3f ms (early exit)\n",
-				ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
+			if (PCIE_HOST_DEBUG_PRINTS) {
+				fprintf(stderr, "%s, W off 0x%lx, 0x%lx failed %zd.\n",
+					fname, offset, bytes, rc);
+				perror("write file");
+			}
+			clock_gettime(CLOCK_MONOTONIC, &ts_end);
+			PCIE_HOST_DBG_PRINT("[TIMING] write_from_buffer: %.3f ms (early exit)\n",
+				ELAPSED_NS(ts_start, ts_end) / 1000000.0);
 			return -EIO;
 		}
 		if (rc != bytes) {
-			fprintf(stderr, "%s, W off 0x%lx, 0x%lx != 0x%lx.\n",
-				fname, offset, rc, bytes);
-			/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
-			printf("[TIMING] write_from_buffer: %.3f ms (early exit)\n",
-				ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
+			if (PCIE_HOST_DEBUG_PRINTS)
+				fprintf(stderr, "%s, W off 0x%lx, 0x%lx != 0x%lx.\n",
+					fname, offset, rc, bytes);
+			clock_gettime(CLOCK_MONOTONIC, &ts_end);
+			PCIE_HOST_DBG_PRINT("[TIMING] write_from_buffer: %.3f ms (early exit)\n",
+				ELAPSED_NS(ts_start, ts_end) / 1000000.0);
 			return -EIO;
 		}
 
@@ -210,18 +222,18 @@ ssize_t write_from_buffer(char *fname, int fd, char *buffer, uint64_t size,
 	} while (count < size);
 
 	if (count != size) {
-		fprintf(stderr, "%s, R failed 0x%lx != 0x%lx.\n",
-				fname, count, size);
-		/* [TIMING debug] clock_gettime(CLOCK_MONOTONIC, &ts_end);
-		printf("[TIMING] write_from_buffer: %.3f ms (early exit)\n",
-			ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
+		if (PCIE_HOST_DEBUG_PRINTS)
+			fprintf(stderr, "%s, R failed 0x%lx != 0x%lx.\n",
+					fname, count, size);
+		clock_gettime(CLOCK_MONOTONIC, &ts_end);
+		PCIE_HOST_DBG_PRINT("[TIMING] write_from_buffer: %.3f ms (early exit)\n",
+			ELAPSED_NS(ts_start, ts_end) / 1000000.0);
 		return -EIO;
 	}
 
 	clock_gettime(CLOCK_MONOTONIC, &ts_end);
-	/* [TIMING debug] Uncomment to log per-frame DMA write latency:
-	printf("[TIMING] write_from_buffer: %.3f ms\n",
-		ELAPSED_NS(ts_start, ts_end) / 1000000.0); */
+	PCIE_HOST_DBG_PRINT("[TIMING] write_from_buffer: %.3f ms\n",
+		ELAPSED_NS(ts_start, ts_end) / 1000000.0);
 	return count;
 }
 

@@ -20,7 +20,6 @@ for { set i 0 } { $i < $argc } { incr i } {
     }
 }
   
-set_dt_param -debug enable
 set_dt_param -dir $sdt_path
 set_dt_param -xsa $xsa_path
 set_dt_param -board_dts $board_dts

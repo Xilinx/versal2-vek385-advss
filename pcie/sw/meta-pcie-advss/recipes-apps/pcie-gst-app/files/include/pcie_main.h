@@ -63,6 +63,7 @@ typedef struct {
     GstElement *inputsrc, *perf;
     GstElement *pipeline, *pciesrc, *capsfilter, *pciesink;
     guint64 appsrc_framecnt, appsink_framecnt;
+    guint64 appsrc_confirmed_framecnt, appsink_confirmed_framecnt;
     guint64 read_offset, yuv_frame_size, export_fd_size;
     GstAllocator *dmabuf_allocator; /* cached per-App; created once, reused every frame */
 } App;
