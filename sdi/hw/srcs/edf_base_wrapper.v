@@ -1,10 +1,16 @@
-// Copyright (c) 2026 Advanced Micro Devices, Inc.
-// SPDX-License-Identifier: MIT
-// -----------------------------------------------
-
+//Copyright (c) 2026 Advanced Micro Devices, Inc.
+//SPDX-License-Identifier: MIT
+//-----------------------------------------------
+//Tool Version: Vivado v.2026.1 (lin64) Build 6432938 Mon Apr 13 17:28:11 MDT 2026
+//Date        : Tue Apr 14 16:48:45 2026
+//Host        : xhdsivarack5 running 64-bit Ubuntu 24.04 LTS
+//Command     : generate_target edf_base_wrapper.bd
+//Design      : edf_base_wrapper
+//Purpose     : IP block netlist
+//--------------------------------------------------------------------------------
 `timescale 1 ps / 1 ps
 
-module versal_gen2_platform_wrapper
+module edf_base_wrapper
    (C0_LPDDR5X_bank700_701_ca,
     C0_LPDDR5X_bank700_701_ck_c,
     C0_LPDDR5X_bank700_701_ck_t,
@@ -60,15 +66,15 @@ module versal_gen2_platform_wrapper
     C4_LPDDR5X_bank714_715_reset_n,
     C4_LPDDR5X_bank714_715_wck_c,
     C4_LPDDR5X_bank714_715_wck_t,
-    GT_Serial_0_grx_n,
+	GT_Serial_0_grx_n,
     GT_Serial_0_grx_p,
     GT_Serial_0_gtx_n,
-    GT_Serial_0_gtx_p,
+    GT_Serial_0_gtx_p,		  
     MMI_GT_grx_n,
     MMI_GT_grx_p,
     MMI_GT_gtx_n,
     MMI_GT_gtx_p,
-    fzetton_i2c_scl_s00,
+	fzetton_i2c_scl_s00,
     fzetton_i2c_sda_s01,
     FZETTON_LNH1983_MOSI,       //FMC_HPC_LA13_P,            FZETTON MOSI LMH 1983
     FZETTON_LNH1983_MISO,       //FMC_HPC_LA13_N,            FZETTON MISO LMH 1983
@@ -80,21 +86,19 @@ module versal_gen2_platform_wrapper
     FZETTON_F_SPI_S1_CH_SEL,    //FMC_HPC_LA01_CC_N,         FZETTON F_SPI_S1 Channel Select
     FZETTON_LNH1983_INIT,       //FMC_HPC_LA12_N,            FZETTON LMH1983 INIT
     FZETTON_SWT_CH3_DIR,        //F
-    gpio_dp_tri_i,
-    gpio_led_tri_o,
-    gpio_pb_tri_i,
+//    gpio_dp_tri_i,
+//    gpio_led_tri_o,
+//    gpio_pb_tri_i,					
     gt_refclk0_clk_n,
     gt_refclk0_clk_p,
     gt_refclk1_clk_n,
     gt_refclk1_clk_p,
-    gt_refclk2_clk_n,
+	gt_refclk2_clk_n,
     gt_refclk2_clk_p,
     gt_refclk_clk_n,
-    gt_refclk_clk_p,
+    gt_refclk_clk_p,				 
     lpddr5_clk0_1_clk_n,
-    lpddr5_clk0_1_clk_p,
-    pl_uart_bank705_rxd,
-    pl_uart_bank705_txd);
+    lpddr5_clk0_1_clk_p);
   output [6:0]C0_LPDDR5X_bank700_701_ca;
   output C0_LPDDR5X_bank700_701_ck_c;
   output C0_LPDDR5X_bank700_701_ck_t;
@@ -153,12 +157,12 @@ module versal_gen2_platform_wrapper
   input [3:0]GT_Serial_0_grx_n;
   input [3:0]GT_Serial_0_grx_p;
   output [3:0]GT_Serial_0_gtx_n;
-  output [3:0]GT_Serial_0_gtx_p;
+  output [3:0]GT_Serial_0_gtx_p;						   
   input [3:0]MMI_GT_grx_n;
   input [3:0]MMI_GT_grx_p;
   output [3:0]MMI_GT_gtx_n;
   output [3:0]MMI_GT_gtx_p;
-    inout   wire        FZETTON_RCLKR_SEL;          //FMC_HPC_LA09_N,            FZETTON RCLKR_SEL
+  inout   wire        FZETTON_RCLKR_SEL;          //FMC_HPC_LA09_N,            FZETTON RCLKR_SEL
     inout   wire        FZETTON_DRVR_SEL;           //FMC_HPC_LA09_P,            FZETTON DRVR_SEL
     inout   wire        FZETTON_RCVR_SEL;           //FMC_HPC_LA05_N,            FZETTON RCVR_SEL
     output   wire       FZETTON_F_SPI_S0_CH_SEL;    //FMC_HPC_LA05_P,            FZETTON F_SPI_S0 Channel Select
@@ -169,10 +173,7 @@ module versal_gen2_platform_wrapper
     inout   wire        fzetton_i2c_scl_s00;           //FMC_HPC_LA07_P,             FZETTON I2C mux SCL
     inout   wire        FZETTON_LNH1983_MOSI;       //FMC_HPC_LA13_P,            FZETTON MOSI LMH 1983
     inout   wire        FZETTON_LNH1983_MISO;       //FMC_HPC_LA13_N,            FZETTON MISO LMH 1983
-    inout   wire        FZETTON_LNH1983_SCLK;       //FMC_HPC_LA17_CC_P,         FZETTON SCLK LMH 1983
-  input [3:0]gpio_dp_tri_i;
-  output [3:0]gpio_led_tri_o;
-  input [1:0]gpio_pb_tri_i;
+    inout   wire        FZETTON_LNH1983_SCLK;       //FMC_HPC_LA17_CC_P,							
   input gt_refclk0_clk_n;
   input gt_refclk0_clk_p;
   input gt_refclk1_clk_n;
@@ -180,11 +181,11 @@ module versal_gen2_platform_wrapper
   input [0:0]gt_refclk2_clk_n;
   input [0:0]gt_refclk2_clk_p;
   input [0:0]gt_refclk_clk_n;
-  input [0:0]gt_refclk_clk_p;
+  input [0:0]gt_refclk_clk_p;							   
   input lpddr5_clk0_1_clk_n;
   input lpddr5_clk0_1_clk_p;
-  input pl_uart_bank705_rxd;
-  output pl_uart_bank705_txd;
+//  input pl_uart_bank705_rxd;
+//  output pl_uart_bank705_txd;
 //--- GPI/GPO ---{
     wire bridge_gpi;
     wire [15:0] QUAD0_gpi_0 = {15'd0,bridge_gpi};
@@ -245,15 +246,15 @@ module versal_gen2_platform_wrapper
   wire C4_LPDDR5X_bank714_715_reset_n;
   wire [3:0]C4_LPDDR5X_bank714_715_wck_c;
   wire [3:0]C4_LPDDR5X_bank714_715_wck_t;
-  wire [3:0]GT_Serial_0_grx_n;
+	wire [3:0]GT_Serial_0_grx_n;
   wire [3:0]GT_Serial_0_grx_p;
   wire [3:0]GT_Serial_0_gtx_n;
-  wire [3:0]GT_Serial_0_gtx_p;
+  wire [3:0]GT_Serial_0_gtx_p;					  
   wire [3:0]MMI_GT_grx_n;
   wire [3:0]MMI_GT_grx_p;
   wire [3:0]MMI_GT_gtx_n;
   wire [3:0]MMI_GT_gtx_p;
- // wire [31:0]QUAD0_gpi_0;
+	// wire [31:0]QUAD0_gpi_0;
 //  wire [31:0]QUAD0_gpo_0;
   wire clk_rxusrclk;
   wire clk_txusrclk;
@@ -288,23 +289,23 @@ module versal_gen2_platform_wrapper
     wire [1:1]fzetton_fmc_spi_ss_o_1;
   wire [2:2]fzetton_fmc_spi_ss_o_2;
   wire fzetton_fmc_spi_ss_t;
-  wire [3:0]gpio_dp_tri_i;
-  wire [3:0]gpio_led_tri_o;
-  wire [1:0]gpio_pb_tri_i;
+//  wire [3:0]gpio_dp_tri_i;
+//  wire [3:0]gpio_led_tri_o;
+//  wire [1:0]gpio_pb_tri_i;						
   wire gt_refclk0_clk_n;
   wire gt_refclk0_clk_p;
   wire gt_refclk1_clk_n;
   wire gt_refclk1_clk_p;
-  wire [0:0]gt_refclk2_clk_n;
+	wire [0:0]gt_refclk2_clk_n;
   wire [0:0]gt_refclk2_clk_p;
   wire [0:0]gt_refclk_clk_n;
   wire [0:0]gt_refclk_clk_p;
     wire [2:0] fzetton_fmc_spi_ss;
-  wire [31:0] fzetton_fmc_gpio;
+  wire [31:0] fzetton_fmc_gpio;															
   wire lpddr5_clk0_1_clk_n;
   wire lpddr5_clk0_1_clk_p;
-  wire pl_uart_bank705_rxd;
-  wire pl_uart_bank705_txd;
+//	wire pl_uart_bank705_rxd;
+//  wire pl_uart_bank705_txd;
     assign FZETTON_LNH1983_INIT     = 1'b1;                  // LMH1983 INIT
   assign FZETTON_SWT_CH3_DIR     = 1'b0;                  // F_CH3_DIR  for ch4
   assign FZETTON_RCLKR_SEL     = fzetton_fmc_spi_ss[0]; //LOC = A30 | IOSTANDARD=LVCMOS25  RCLKR
@@ -352,8 +353,9 @@ module versal_gen2_platform_wrapper
        (.I(fzetton_fmc_spi_ss_o_2),
         .IO(fzetton_fmc_spi_ss[2]),
         .O(fzetton_fmc_spi_ss_i_2),
-        .T(fzetton_fmc_spi_ss_t));
-  versal_gen2_platform versal_gen2_platform_i
+        .T(fzetton_fmc_spi_ss_t));															  
+
+  edf_base edf_base_i
        (.C0_LPDDR5X_bank700_701_ca(C0_LPDDR5X_bank700_701_ca),
         .C0_LPDDR5X_bank700_701_ck_c(C0_LPDDR5X_bank700_701_ck_c),
         .C0_LPDDR5X_bank700_701_ck_t(C0_LPDDR5X_bank700_701_ck_t),
@@ -409,15 +411,15 @@ module versal_gen2_platform_wrapper
         .C4_LPDDR5X_bank714_715_reset_n(C4_LPDDR5X_bank714_715_reset_n),
         .C4_LPDDR5X_bank714_715_wck_c(C4_LPDDR5X_bank714_715_wck_c),
         .C4_LPDDR5X_bank714_715_wck_t(C4_LPDDR5X_bank714_715_wck_t),
-        .GT_Serial_0_grx_n(GT_Serial_0_grx_n),
+		.GT_Serial_0_grx_n(GT_Serial_0_grx_n),
         .GT_Serial_0_grx_p(GT_Serial_0_grx_p),
         .GT_Serial_0_gtx_n(GT_Serial_0_gtx_n),
-        .GT_Serial_0_gtx_p(GT_Serial_0_gtx_p),
+        .GT_Serial_0_gtx_p(GT_Serial_0_gtx_p),									  
         .MMI_GT_grx_n(MMI_GT_grx_n),
         .MMI_GT_grx_p(MMI_GT_grx_p),
         .MMI_GT_gtx_n(MMI_GT_gtx_n),
         .MMI_GT_gtx_p(MMI_GT_gtx_p),
-        .QUAD0_gpi_0(QUAD0_gpi_0),
+		.QUAD0_gpi_0(QUAD0_gpi_0),
         .QUAD0_gpo_0(QUAD0_gpo_0),
         .clk_rxusrclk(clk_rxusrclk),
         .clk_txusrclk(clk_txusrclk),
@@ -440,19 +442,17 @@ module versal_gen2_platform_wrapper
         .fzetton_fmc_spi_ss_i({fzetton_fmc_spi_ss_i_2,fzetton_fmc_spi_ss_i_1,fzetton_fmc_spi_ss_i_0}),
         .fzetton_fmc_spi_ss_o({fzetton_fmc_spi_ss_o_2,fzetton_fmc_spi_ss_o_1,fzetton_fmc_spi_ss_o_0}),
         .fzetton_fmc_spi_ss_t(fzetton_fmc_spi_ss_t),
-        .gpio_dp_tri_i(gpio_dp_tri_i),
-        .gpio_led_tri_o(gpio_led_tri_o),
-        .gpio_pb_tri_i(gpio_pb_tri_i),
+//        .gpio_dp_tri_i(gpio_dp_tri_i),
+//        .gpio_led_tri_o(gpio_led_tri_o),
+//        .gpio_pb_tri_i(gpio_pb_tri_i),						  
         .gt_refclk0_clk_n(gt_refclk0_clk_n),
         .gt_refclk0_clk_p(gt_refclk0_clk_p),
         .gt_refclk1_clk_n(gt_refclk1_clk_n),
         .gt_refclk1_clk_p(gt_refclk1_clk_p),
-        .gt_refclk2_clk_n(gt_refclk2_clk_n),
+		.gt_refclk2_clk_n(gt_refclk2_clk_n),
         .gt_refclk2_clk_p(gt_refclk2_clk_p),
         .gt_refclk_clk_n(gt_refclk_clk_n),
-        .gt_refclk_clk_p(gt_refclk_clk_p),
+        .gt_refclk_clk_p(gt_refclk_clk_p),									
         .lpddr5_clk0_1_clk_n(lpddr5_clk0_1_clk_n),
-        .lpddr5_clk0_1_clk_p(lpddr5_clk0_1_clk_p),
-        .pl_uart_bank705_rxd(pl_uart_bank705_rxd),
-        .pl_uart_bank705_txd(pl_uart_bank705_txd));
+        .lpddr5_clk0_1_clk_p(lpddr5_clk0_1_clk_p));
 endmodule

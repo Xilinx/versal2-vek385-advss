@@ -14,13 +14,7 @@
 ##BANK205 for GT_Serial_0
 
 set_property PACKAGE_PIN N45 [get_ports {GT_Serial_0_grx_p[0]}]
-set_property PACKAGE_PIN P42 [get_ports {GT_Serial_0_gtx_p[0]}] 
-#set_property PACKAGE_PIN L45 [get_ports {GT_Serial_0_grx_p[1]}]
-#set_property PACKAGE_PIN M42 [get_ports {GT_Serial_0_gtx_p[1]}]
-#set_property PACKAGE_PIN J45 [get_ports {GT_Serial_0_grx_p[2]}]
-#set_property PACKAGE_PIN K42 [get_ports {GT_Serial_0_gtx_p[2]}]
-#set_property PACKAGE_PIN G45 [get_ports {GT_Serial_0_grx_p[3]}]
-#set_property PACKAGE_PIN H42 [get_ports {GT_Serial_0_gtx_p[3]}]
+set_property PACKAGE_PIN P42 [get_ports {GT_Serial_0_gtx_p[0]}]
 
 ##BANK205 for GTREF_CLK1 
 set_property PACKAGE_PIN M38 [get_ports {gt_refclk2_clk_p[0]}]
